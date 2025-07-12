@@ -5,9 +5,12 @@ module Ragdoll
     class Client
       def initialize(config = nil)
         @config = config || Ragdoll::Core.configuration
-        @storage = create_storage_backend
+        
+        # Setup database connection
+        Database.setup(@config.database_config)
+        
         @embedding_service = EmbeddingService.new(@config)
-        @search_engine = SearchEngine.new(@storage, @embedding_service)
+        @search_engine = SearchEngine.new(@embedding_service)
       end
 
       # Primary method for RAG applications
@@ -92,8 +95,8 @@ module Ragdoll
                 options[:title] || 
                 File.basename(file_path, File.extname(file_path))
         
-        # Add document to storage
-        doc_id = @storage.add_document(file_path, parsed[:content], {
+        # Add document to database
+        doc_id = @search_engine.add_document(file_path, parsed[:content], {
           title: title,
           document_type: parsed[:document_type],
           **parsed[:metadata],
@@ -107,8 +110,8 @@ module Ragdoll
       end
 
       def add_text(content, title:, **options)
-        # Add document to storage
-        doc_id = @storage.add_document(title, content, {
+        # Add document to database
+        doc_id = @search_engine.add_document(title, content, {
           title: title,
           document_type: 'text',
           **options
@@ -140,7 +143,7 @@ module Ragdoll
       end
 
       def get_document(id)
-        @storage.get_document(id)
+        @search_engine.get_document(id)
       end
 
       def update_document(id, **updates)
@@ -161,34 +164,22 @@ module Ragdoll
       end
 
       def search_analytics(days: 30)
-        # This would need to be implemented in storage backends that support analytics
-        { days: days, message: 'Analytics not implemented for this storage backend' }
+        # This could be implemented with additional database queries
+        Models::Embedding.where('returned_at > ?', days.days.ago)
+                         .group('DATE(returned_at)')
+                         .count
       end
 
       # Health check
       def healthy?
         begin
-          stat_info = stats
-          stat_info[:total_documents] >= 0
+          Database.connected? && stats[:total_documents] >= 0
         rescue => e
           false
         end
       end
 
       private
-
-      def create_storage_backend
-        case @config.storage_backend
-        when :file
-          Storage::FileStorage.new(@config.storage_config)
-        when :memory
-          Storage::MemoryStorage.new(@config.storage_config)
-        when :activerecord
-          Storage::ActiveRecordStorage.new(@config.storage_config)
-        else
-          raise ConfigurationError, "Unknown storage backend: #{@config.storage_backend}"
-        end
-      end
 
       def process_document_embeddings(doc_id, content, options = {})
         # Chunk the content
@@ -204,7 +195,7 @@ module Ragdoll
           embedding = @embedding_service.generate_embedding(chunk)
           next unless embedding
           
-          @storage.add_embedding(doc_id, index, embedding, {
+          @search_engine.add_embedding(doc_id, index, embedding, {
             content: chunk,
             model_name: @config.embedding_model,
             chunk_size: chunk_size,

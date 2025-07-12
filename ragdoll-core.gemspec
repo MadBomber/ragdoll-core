@@ -31,15 +31,20 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  # Core dependencies - no Rails dependencies
+  # Core dependencies
   spec.add_dependency "ruby_llm", "~> 1.3"
   spec.add_dependency "faraday", "~> 2.0"
   spec.add_dependency "pdf-reader", "~> 2.0"
   spec.add_dependency "docx", "~> 0.8"
+  spec.add_dependency "activerecord", "~> 7.0"
+  spec.add_dependency "sqlite3", "~> 1.4"
 
   # Development dependencies
   spec.add_development_dependency "bundler", "~> 2.0"
   spec.add_development_dependency "rake", "~> 13.0"
-  spec.add_development_dependency "rspec", "~> 3.0"
+  spec.add_development_dependency "minitest", "~> 5.0"
+  spec.add_development_dependency "simplecov", "~> 0.21"
+  spec.add_development_dependency "undercover", "~> 0.4"
   spec.add_development_dependency "rubocop", "~> 1.0"
+  spec.add_development_dependency "annotate", "~> 3.2"
 end

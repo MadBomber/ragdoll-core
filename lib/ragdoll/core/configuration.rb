@@ -9,7 +9,7 @@ module Ragdoll
                     :max_embedding_dimensions, :enable_document_summarization, :summary_model,
                     :summary_max_length, :summary_min_content_length, :enable_usage_tracking,
                     :usage_ranking_enabled, :usage_recency_weight, :usage_frequency_weight,
-                    :usage_similarity_weight, :storage_backend, :storage_config
+                    :usage_similarity_weight, :database_config
 
       def initialize
         @llm_provider = :openai
@@ -34,8 +34,7 @@ module Ragdoll
         @usage_recency_weight = 0.3
         @usage_frequency_weight = 0.7
         @usage_similarity_weight = 1.0
-        @storage_backend = :memory
-        @storage_config = {}
+        @database_config = default_database_config
       end
 
       def openai_api_key
@@ -119,6 +118,16 @@ module Ragdoll
           huggingface: {
             api_key: ENV['HUGGINGFACE_API_KEY']
           }
+        }
+      end
+
+      def default_database_config
+        {
+          adapter: 'sqlite3',
+          database: File.join(Dir.home, '.ragdoll', 'ragdoll.sqlite3'),
+          timeout: 5000,
+          auto_migrate: true,
+          logger: nil # Set to Logger.new(STDOUT) for debugging
         }
       end
     end

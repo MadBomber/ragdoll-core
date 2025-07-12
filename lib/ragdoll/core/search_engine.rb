@@ -3,8 +3,7 @@
 module Ragdoll
   module Core
     class SearchEngine
-      def initialize(storage_backend, embedding_service)
-        @storage = storage_backend
+      def initialize(embedding_service)
         @embedding_service = embedding_service
       end
 
@@ -17,11 +16,11 @@ module Ragdoll
         query_embedding = @embedding_service.generate_embedding(query)
         return [] if query_embedding.nil?
 
-        # Search using the storage backend
-        @storage.search_similar_embeddings(query_embedding, 
-                                          limit: limit, 
-                                          threshold: threshold, 
-                                          filters: filters)
+        # Search using ActiveRecord models
+        Models::Embedding.search_similar(query_embedding, 
+                                        limit: limit, 
+                                        threshold: threshold, 
+                                        filters: filters)
       end
 
       def search_similar_content(query_or_embedding, options = {})
@@ -38,35 +37,76 @@ module Ragdoll
           return [] if query_embedding.nil?
         end
 
-        # Search using the storage backend
-        @storage.search_similar_embeddings(query_embedding, 
-                                          limit: limit, 
-                                          threshold: threshold, 
-                                          filters: filters)
+        # Search using ActiveRecord models
+        Models::Embedding.search_similar(query_embedding, 
+                                        limit: limit, 
+                                        threshold: threshold, 
+                                        filters: filters)
       end
 
       def add_document(location, content, metadata = {})
-        @storage.add_document(location, content, metadata)
+        document = Models::Document.create!(
+          location: location,
+          content: content,
+          title: metadata[:title] || metadata['title'] || extract_title_from_location(location),
+          document_type: metadata[:document_type] || metadata['document_type'] || 'text',
+          metadata: metadata.is_a?(Hash) ? metadata : {},
+          status: 'processed'
+        )
+        
+        document.id.to_s
       end
 
       def get_document(id)
-        @storage.get_document(id)
+        document = Models::Document.find_by(id: id)
+        document&.to_hash
       end
 
       def update_document(id, **updates)
-        @storage.update_document(id, **updates) if @storage.respond_to?(:update_document)
+        document = Models::Document.find_by(id: id)
+        return nil unless document
+        
+        # Only update allowed fields
+        allowed_updates = updates.slice(:title, :metadata, :status, :document_type)
+        document.update!(allowed_updates) if allowed_updates.any?
+        
+        document.to_hash
       end
 
       def delete_document(id)
-        @storage.delete_document(id) if @storage.respond_to?(:delete_document)
+        document = Models::Document.find_by(id: id)
+        return nil unless document
+        
+        document.destroy!
+        true
       end
 
       def list_documents(options = {})
-        @storage.list_documents(options) if @storage.respond_to?(:list_documents)
+        limit = options[:limit] || 100
+        offset = options[:offset] || 0
+        
+        Models::Document.offset(offset).limit(limit).recent.map(&:to_hash)
       end
 
       def get_document_stats
-        @storage.get_document_stats if @storage.respond_to?(:get_document_stats)
+        Models::Document.stats
+      end
+
+      def add_embedding(document_id, chunk_index, embedding_vector, metadata = {})
+        Models::Embedding.create!(
+          document_id: document_id,
+          chunk_index: chunk_index,
+          embedding_vector: embedding_vector,
+          content: metadata[:content] || '',
+          model_name: metadata[:model_name] || 'unknown',
+          metadata: metadata.except(:content, :model_name)
+        ).id.to_s
+      end
+
+      private
+
+      def extract_title_from_location(location)
+        File.basename(location, File.extname(location))
       end
     end
   end
