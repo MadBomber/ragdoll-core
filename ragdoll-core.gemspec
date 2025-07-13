@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.description = "Framework-agnostic RAG (Retrieval-Augmented Generation) library providing document processing, text chunking, embedding generation, and semantic search capabilities"
   spec.homepage = "https://github.com/MadBomber/ragdoll-core"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.0.0"
+  spec.required_ruby_version = ">= 3.2.0"
 
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
   spec.metadata["homepage_uri"] = spec.homepage
@@ -32,25 +32,25 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   # Core dependencies
-  spec.add_dependency "ruby_llm", "~> 1.3"
-  spec.add_dependency "faraday", "~> 2.0"
-  spec.add_dependency "pdf-reader", "~> 2.0"
-  spec.add_dependency "docx", "~> 0.8"
-  spec.add_dependency "activerecord", "~> 7.0"
-  spec.add_dependency "activestorage", "~> 7.0"
-  spec.add_dependency "sqlite3", "~> 1.4"
-  
+  spec.add_dependency "ruby_llm"
+  spec.add_dependency "pdf-reader"
+  spec.add_dependency "docx"
+  spec.add_dependency "activerecord"
+  spec.add_dependency "activestorage"
+
   # Search dependencies
-  spec.add_dependency "neighbor", "~> 0.3" # Vector similarity search
-  spec.add_dependency "searchkick", "~> 5.0" # Full-text search
-  spec.add_dependency "sqlite-vec", "~> 0.1" # SQLite vector extension
+  spec.add_dependency "neighbor"
+  spec.add_dependency "searchkick"
+  spec.add_dependency "opensearch-ruby"
 
   # Development dependencies
-  spec.add_development_dependency "bundler", "~> 2.0"
-  spec.add_development_dependency "rake", "~> 13.0"
-  spec.add_development_dependency "minitest", "~> 5.0"
-  spec.add_development_dependency "simplecov", "~> 0.21"
-  spec.add_development_dependency "undercover", "~> 0.7"
-  spec.add_development_dependency "rubocop", "~> 1.0"
-  spec.add_development_dependency "annotate", "~> 3.2"
+  spec.add_development_dependency "sqlite3"
+  spec.add_development_dependency "sqlite-vec"
+  spec.add_development_dependency "bundler"
+  spec.add_development_dependency "rake"
+  spec.add_development_dependency "minitest"
+  spec.add_development_dependency "simplecov"
+  spec.add_development_dependency "undercover"
+  spec.add_development_dependency "rubocop"
+  spec.add_development_dependency "annotate"
 end
