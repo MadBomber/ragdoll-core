@@ -80,23 +80,6 @@ module Ragdoll
         end
 
 
-        def to_hash
-          {
-            id: id.to_s,
-            document_id: document_id.to_s,
-            document_title: document&.title || 'Unknown',
-            document_location: document&.location || 'Unknown',
-            content: content,
-            chunk_index: chunk_index,
-            embedding_vector: embedding_vector,
-            embedding_dimensions: embedding_dimensions,
-            model_name: model_name,
-            metadata: metadata || {},
-            usage_count: usage_count || 0,
-            returned_at: returned_at,
-            created_at: created_at
-          }
-        end
 
 
         # Enhanced search using neighbor gem for better performance

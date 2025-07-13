@@ -9,7 +9,8 @@ module Ragdoll
                     :max_embedding_dimensions, :enable_document_summarization, :summary_model,
                     :summary_max_length, :summary_min_content_length, :enable_usage_tracking,
                     :usage_ranking_enabled, :usage_recency_weight, :usage_frequency_weight,
-                    :usage_similarity_weight, :database_config
+                    :usage_similarity_weight, :database_config,
+                    :summary_provider_model, :keywords_provider_model, :embeddings_provider_model
 
       def initialize
         @llm_provider = :openai
@@ -35,6 +36,9 @@ module Ragdoll
         @usage_frequency_weight = 0.7
         @usage_similarity_weight = 1.0
         @database_config = default_database_config
+        @summary_provider_model = 'openai/gpt-4'
+        @keywords_provider_model = 'openai/gpt-4'
+        @embeddings_provider_model = 'openai/text-embedding-3-small'
       end
 
 
@@ -114,7 +118,47 @@ module Ragdoll
         @llm_config[:openrouter][:api_key] = key
       end
 
+      # Parse provider/model strings and return provider and model separately
+      def summary_provider
+        parse_provider_model(summary_provider_model)[:provider]
+      end
+
+      def summary_model_name
+        parse_provider_model(summary_provider_model)[:model]
+      end
+
+      def keywords_provider
+        parse_provider_model(keywords_provider_model)[:provider]
+      end
+
+      def keywords_model_name
+        parse_provider_model(keywords_provider_model)[:model]
+      end
+
+      def embeddings_provider
+        parse_provider_model(embeddings_provider_model)[:provider]
+      end
+
+      def embeddings_model_name
+        parse_provider_model(embeddings_provider_model)[:model]
+      end
+
       private
+
+      # Parse a provider/model string into its components
+      # Format: "provider/model" -> { provider: :provider, model: "model" }
+      # Format: "model" -> { provider: nil, model: "model" } (RubyLLM determines provider)
+      def parse_provider_model(provider_model_string)
+        return { provider: nil, model: nil } if provider_model_string.nil? || provider_model_string.empty?
+
+        parts = provider_model_string.split('/', 2)
+        if parts.length == 2
+          { provider: parts[0].to_sym, model: parts[1] }
+        else
+          # If no slash, let RubyLLM determine provider from model name
+          { provider: nil, model: provider_model_string }
+        end
+      end
 
       def default_llm_config
         {

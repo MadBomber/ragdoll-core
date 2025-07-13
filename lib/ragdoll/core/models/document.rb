@@ -176,38 +176,6 @@ module Ragdoll
         end
 
 
-        def to_hash
-          hash = {
-            id: id.to_s,
-            location: location,
-            content: effective_content,
-            title: title,
-            summary: summary,
-            keywords: keywords,
-            keywords_array: keywords_array,
-            document_type: document_type,
-            metadata: metadata || {},
-            status: status,
-            created_at: created_at,
-            updated_at: updated_at,
-            word_count: word_count,
-            character_count: character_count,
-            embedding_count: embedding_count,
-            file_attached: file_attached?,
-            has_summary: has_summary?,
-            has_keywords: has_keywords?
-          }
-
-          if file_attached?
-            hash.merge!({
-                          file_size: file_size,
-                          file_content_type: file_content_type,
-                          file_filename: file_filename
-                        })
-          end
-
-          hash
-        end
 
 
         # Enhanced search using searchkick for full-text search on summary and keywords
