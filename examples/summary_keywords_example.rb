@@ -18,16 +18,16 @@ end
 # Initialize the database
 Ragdoll::Core::Database.setup
 
-puts "=== Summary and Keywords Example ==="
+puts '=== Summary and Keywords Example ==='
 
 # Example content about machine learning
 ml_content = <<~TEXT
-  Machine learning is a method of data analysis that automates analytical model building. 
-  It is a branch of artificial intelligence based on the idea that systems can learn from data, 
-  identify patterns and make decisions with minimal human intervention. Machine learning algorithms 
-  build a model based on training data in order to make predictions or decisions without being 
-  explicitly programmed to do so. Applications range from email filtering and computer vision 
-  to recommendation systems and autonomous vehicles. The field has gained tremendous momentum 
+  Machine learning is a method of data analysis that automates analytical model building.#{' '}
+  It is a branch of artificial intelligence based on the idea that systems can learn from data,#{' '}
+  identify patterns and make decisions with minimal human intervention. Machine learning algorithms#{' '}
+  build a model based on training data in order to make predictions or decisions without being#{' '}
+  explicitly programmed to do so. Applications range from email filtering and computer vision#{' '}
+  to recommendation systems and autonomous vehicles. The field has gained tremendous momentum#{' '}
   with the advent of big data, improved algorithms, and increased computational power.
 TEXT
 
@@ -55,12 +55,12 @@ puts "Keywords array: #{document.keywords_array.inspect}"
 
 # Example 2: Create another document
 ai_content = <<~TEXT
-  Artificial intelligence (AI) refers to the simulation of human intelligence in machines 
-  that are programmed to think like humans and mimic their actions. The term may also be 
-  applied to any machine that exhibits traits associated with a human mind such as learning 
-  and problem-solving. AI research has been highly successful in developing effective 
-  techniques for solving a wide range of problems, from game playing to medical diagnosis. 
-  Neural networks, deep learning, natural language processing, and computer vision are 
+  Artificial intelligence (AI) refers to the simulation of human intelligence in machines#{' '}
+  that are programmed to think like humans and mimic their actions. The term may also be#{' '}
+  applied to any machine that exhibits traits associated with a human mind such as learning#{' '}
+  and problem-solving. AI research has been highly successful in developing effective#{' '}
+  techniques for solving a wide range of problems, from game playing to medical diagnosis.#{' '}
+  Neural networks, deep learning, natural language processing, and computer vision are#{' '}
   key areas of AI research and development.
 TEXT
 
@@ -90,7 +90,7 @@ all_keywords = Ragdoll::Core::Models::Document.all_keywords
 puts "All available keywords: #{all_keywords.first(10).join(', ')}..."
 
 keyword_frequencies = Ragdoll::Core::Models::Document.keyword_frequencies
-puts "Top keyword frequencies:"
+puts 'Top keyword frequencies:'
 keyword_frequencies.first(5).each do |keyword, count|
   puts "  #{keyword}: #{count}"
 end
@@ -99,7 +99,7 @@ end
 puts "\n7. Search by Keywords:"
 search_results = Ragdoll::Core::Models::Document.faceted_search(
   query: nil,
-  keywords: ['learning', 'intelligence']
+  keywords: %w[learning intelligence]
 )
 puts "Documents with 'learning' and 'intelligence' keywords: #{search_results.count}"
 
@@ -129,6 +129,6 @@ puts "Keywords present: #{hash[:has_keywords]}"
 puts "Keywords array: #{hash[:keywords_array].first(3).join(', ')}..."
 
 puts "\n=== Summary and Keywords Integration Complete ==="
-puts "Documents now automatically generate summaries and extract keywords."
-puts "Search functionality focuses on summary and keywords rather than raw content."
-puts "Faceted search enables filtering by specific keywords."
+puts 'Documents now automatically generate summaries and extract keywords.'
+puts 'Search functionality focuses on summary and keywords rather than raw content.'
+puts 'Faceted search enables filtering by specific keywords.'

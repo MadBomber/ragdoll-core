@@ -1,12 +1,12 @@
 require 'simplecov'
 
 SimpleCov.start do
-  add_filter "/test/"
-  track_files "lib/**/*.rb"
-  minimum_coverage 0  # Temporarily disable coverage requirement
-  
-  add_group "Core", "lib/ragdoll/core"
-  add_group "Models", "lib/ragdoll/core/models"
+  add_filter '/test/'
+  track_files 'lib/**/*.rb'
+  minimum_coverage 0 # Temporarily disable coverage requirement
+
+  add_group 'Core', 'lib/ragdoll/core'
+  add_group 'Models', 'lib/ragdoll/core/models'
 end
 
 # Load undercover after SimpleCov to avoid circular requires
@@ -30,20 +30,21 @@ ActiveRecord::Migration.verbose = false
 class Minitest::Test
   def setup
     Ragdoll::Core.reset_configuration!
-    
+
     # Silence all ActiveRecord output
     ActiveRecord::Base.logger = nil
     ActiveRecord::Migration.verbose = false
-    
+
     # Setup test database
     Ragdoll::Core::Database.setup({
-      adapter: 'sqlite3',
-      database: ':memory:',
-      timeout: 5000,
-      auto_migrate: true,
-      logger: nil
-    })
+                                    adapter: 'sqlite3',
+                                    database: ':memory:',
+                                    timeout: 5000,
+                                    auto_migrate: true,
+                                    logger: nil
+                                  })
   end
+
 
   def teardown
     # Clean up database
@@ -56,7 +57,7 @@ class Minitest::Test
         Ragdoll::Core::Models::Document.delete_all
       end
     end
-    
+
     Ragdoll::Core.reset_configuration!
   end
 end

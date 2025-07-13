@@ -1,16 +1,16 @@
 # madbomber/ragdoll-core/Gemfile
 
-source "https://rubygems.org"
+source 'https://rubygems.org'
 
 gemspec
 
 group :development, :test do
-  gem "debug_me"
-  gem "bundler"
-  gem "rake"
-  gem "minitest"
-  gem "simplecov"
-  gem "undercover"
-  gem "rubocop"
-  gem "annotate"
+  gem 'annotate'
+  gem 'bundler'
+  gem 'debug_me'
+  gem 'minitest'
+  gem 'rake'
+  gem 'rubocop'
+  gem 'simplecov'
+  gem 'undercover'
 end

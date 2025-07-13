@@ -5,19 +5,20 @@ module Ragdoll
     class Client
       def initialize(config = nil)
         @config = config || Ragdoll::Core.configuration
-        
+
         # Setup database connection
         Database.setup(@config.database_config)
-        
+
         @embedding_service = EmbeddingService.new(@config)
         @search_engine = SearchEngine.new(@embedding_service)
       end
+
 
       # Primary method for RAG applications
       # Returns context-enhanced content for AI prompts
       def enhance_prompt(prompt, context_limit: 5, **options)
         context_data = get_context(prompt, limit: context_limit, **options)
-        
+
         if context_data[:context_chunks].any?
           enhanced_prompt = build_enhanced_prompt(prompt, context_data[:combined_context])
           {
@@ -36,10 +37,11 @@ module Ragdoll
         end
       end
 
+
       # Get relevant context without prompt enhancement
       def get_context(query, limit: 10, **options)
         results = search_similar_content(query, limit: limit, **options)
-        
+
         context_chunks = results.map do |result|
           {
             content: result[:content],
@@ -48,9 +50,9 @@ module Ragdoll
             chunk_index: result[:chunk_index]
           }
         end
-        
+
         combined_context = context_chunks.map { |chunk| chunk[:content] }.join("\n\n")
-        
+
         {
           context_chunks: context_chunks,
           combined_context: combined_context,
@@ -58,10 +60,11 @@ module Ragdoll
         }
       end
 
+
       # Semantic search
       def search(query, **options)
         results = search_similar_content(query, **options)
-        
+
         {
           query: query,
           results: results,
@@ -69,10 +72,12 @@ module Ragdoll
         }
       end
 
+
       # Search similar content (core functionality)
       def search_similar_content(query_or_embedding, **options)
         @search_engine.search_similar_content(query_or_embedding, **options)
       end
+
 
       # Document management
       def add_document(location_or_content, **options)
@@ -86,82 +91,91 @@ module Ragdoll
         end
       end
 
+
       def add_file(file_path, **options)
         # Parse the document
         parsed = DocumentProcessor.parse(file_path)
-        
+
         # Extract title from metadata or use filename
-        title = parsed[:metadata][:title] || 
-                options[:title] || 
+        title = parsed[:metadata][:title] ||
+                options[:title] ||
                 File.basename(file_path, File.extname(file_path))
-        
+
         # Add document to database
         doc_id = @search_engine.add_document(file_path, parsed[:content], {
-          title: title,
-          document_type: parsed[:document_type],
-          **parsed[:metadata],
-          **options
-        })
-        
+                                               title: title,
+                                               document_type: parsed[:document_type],
+                                               **parsed[:metadata],
+                                               **options
+                                             })
+
         # Process and add embeddings
         process_document_embeddings(doc_id, parsed[:content], options)
-        
+
         doc_id
       end
+
 
       def add_text(content, title:, **options)
         # Add document to database
         doc_id = @search_engine.add_document(title, content, {
-          title: title,
-          document_type: 'text',
-          **options
-        })
-        
+                                               title: title,
+                                               document_type: 'text',
+                                               **options
+                                             })
+
         # Process and add embeddings
         process_document_embeddings(doc_id, content, options)
-        
+
         doc_id
       end
+
 
       def add_directory(directory_path, recursive: false, **options)
         results = []
         pattern = recursive ? File.join(directory_path, '**', '*') : File.join(directory_path, '*')
-        
+
         Dir.glob(pattern).each do |file_path|
           next unless File.file?(file_path)
           next if file_path.match?(/\.(jpg|jpeg|png|gif|bmp|svg|ico)$/i) # Skip images
-          
+
           begin
             doc_id = add_file(file_path, **options)
             results << { file: file_path, document_id: doc_id, status: 'success' }
-          rescue => e
+          rescue StandardError => e
             results << { file: file_path, error: e.message, status: 'error' }
           end
         end
-        
+
         results
       end
+
 
       def get_document(id)
         @search_engine.get_document(id)
       end
 
+
       def update_document(id, **updates)
         @search_engine.update_document(id, **updates)
       end
+
 
       def delete_document(id)
         @search_engine.delete_document(id)
       end
 
+
       def list_documents(**options)
         @search_engine.list_documents(options)
       end
+
 
       # Analytics and stats
       def stats
         @search_engine.get_document_stats
       end
+
 
       def search_analytics(days: 30)
         # This could be implemented with additional database queries
@@ -170,13 +184,14 @@ module Ragdoll
                          .count
       end
 
+
       # Health check
       def healthy?
-        begin
-          Database.connected? && stats[:total_documents] >= 0
-        rescue
-          false
-        end
+
+        Database.connected? && stats[:total_documents] >= 0
+      rescue StandardError
+        false
+
       end
 
       private
@@ -185,32 +200,34 @@ module Ragdoll
         # Chunk the content
         chunk_size = options[:chunk_size] || @config.chunk_size
         chunk_overlap = options[:chunk_overlap] || @config.chunk_overlap
-        
-        chunks = TextChunker.chunk(content, 
-                                  chunk_size: chunk_size, 
-                                  chunk_overlap: chunk_overlap)
-        
+
+        chunks = TextChunker.chunk(content,
+                                   chunk_size: chunk_size,
+                                   chunk_overlap: chunk_overlap)
+
         # Generate embeddings for each chunk
         chunks.each_with_index do |chunk, index|
           embedding = @embedding_service.generate_embedding(chunk)
           next unless embedding
-          
+
           @search_engine.add_embedding(doc_id, index, embedding, {
-            content: chunk,
-            model_name: @config.embedding_model,
-            chunk_size: chunk_size,
-            chunk_overlap: chunk_overlap
-          })
+                                         content: chunk,
+                                         model_name: @config.embedding_model,
+                                         chunk_size: chunk_size,
+                                         chunk_overlap: chunk_overlap
+                                       })
         end
       end
 
+
       def build_enhanced_prompt(original_prompt, context)
         template = @config.prompt_template || default_prompt_template
-        
+
         template
           .gsub('{{context}}', context)
           .gsub('{{prompt}}', original_prompt)
       end
+
 
       def default_prompt_template
         <<~TEMPLATE

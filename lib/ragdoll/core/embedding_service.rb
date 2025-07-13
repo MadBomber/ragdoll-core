@@ -11,12 +11,13 @@ module Ragdoll
         configure_ruby_llm unless @client
       end
 
+
       def generate_embedding(text)
         return nil if text.nil? || text.strip.empty?
 
         # Clean and prepare text
         cleaned_text = clean_text(text)
-        
+
         begin
           if @client
             # Use custom client for testing
@@ -24,24 +25,24 @@ module Ragdoll
               input: cleaned_text,
               model: @configuration.embedding_model
             )
-            
+
             if response && response['embeddings'] && response['embeddings'].first
               response['embeddings'].first
             elsif response && response['data'] && response['data'].first && response['data'].first['embedding']
               response['data'].first['embedding']
             else
-              raise EmbeddingError, "Invalid response format from embedding API"
+              raise EmbeddingError, 'Invalid response format from embedding API'
             end
           else
             # Create a dummy embedding for testing/dev environments without API calls
             # In production, this should use the actual API
             Array.new(1536) { rand(-1.0..1.0) }
           end
-
-        rescue => e
+        rescue StandardError => e
           raise EmbeddingError, "Failed to generate embedding: #{e.message}"
         end
       end
+
 
       def generate_embeddings_batch(texts)
         return [] if texts.empty?
@@ -63,17 +64,17 @@ module Ragdoll
             elsif response && response['data']
               response['data'].map { |item| item['embedding'] }
             else
-              raise EmbeddingError, "Invalid response format from embedding API"
+              raise EmbeddingError, 'Invalid response format from embedding API'
             end
           else
             # Create dummy embeddings for testing/dev environments
             cleaned_texts.map { Array.new(1536) { rand(-1.0..1.0) } }
           end
-
-        rescue => e
+        rescue StandardError => e
           raise EmbeddingError, "Failed to generate embeddings: #{e.message}"
         end
       end
+
 
       def cosine_similarity(embedding1, embedding2)
         return 0.0 if embedding1.nil? || embedding2.nil?
@@ -122,15 +123,16 @@ module Ragdoll
         end
       end
 
+
       def clean_text(text)
         return '' if text.nil?
-        
+
         # Remove excessive whitespace and normalize
         cleaned = text.strip
-          .gsub(/\s+/, ' ')              # Multiple spaces to single space
-          .gsub(/\n+/, "\n")             # Multiple newlines to single newline
-          .gsub(/\t+/, ' ')              # Tabs to spaces
-        
+                      .gsub(/\s+/, ' ')              # Multiple spaces to single space
+                      .gsub(/\n+/, "\n")             # Multiple newlines to single newline
+                      .gsub(/\t+/, ' ')              # Tabs to spaces
+
         # Truncate if too long (most embedding models have token limits)
         max_chars = 8000 # Conservative limit for most embedding models
         cleaned.length > max_chars ? cleaned[0, max_chars] : cleaned

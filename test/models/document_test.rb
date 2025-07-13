@@ -9,7 +9,7 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     assert document.persisted?
     assert_equal '/path/to/doc.txt', document.location
     assert_equal 'Test content', document.content
@@ -17,6 +17,7 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
     assert_equal 'text', document.document_type
     assert_equal 'processed', document.status
   end
+
 
   def test_validations
     # Test required fields
@@ -28,6 +29,7 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
     assert_includes document.errors.keys, :document_type
   end
 
+
   def test_status_validation
     document = Ragdoll::Core::Models::Document.new(
       location: '/test',
@@ -36,10 +38,11 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'invalid_status'
     )
-    
+
     refute document.valid?
     assert_includes document.errors.keys, :status
   end
+
 
   def test_associations
     document = Ragdoll::Core::Models::Document.create!(
@@ -49,17 +52,18 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     embedding = document.embeddings.create!(
       chunk_index: 0,
       embedding_vector: [0.1, 0.2, 0.3],
       content: 'chunk content',
       model_name: 'test-model'
     )
-    
+
     assert_equal 1, document.embeddings.count
     assert_equal document, embedding.document
   end
+
 
   def test_scopes
     doc1 = Ragdoll::Core::Models::Document.create!(
@@ -69,7 +73,7 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     doc2 = Ragdoll::Core::Models::Document.create!(
       location: '/doc2.pdf',
       content: 'Content 2',
@@ -77,17 +81,18 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'pdf',
       status: 'pending'
     )
-    
+
     # Test processed scope
     processed_docs = Ragdoll::Core::Models::Document.processed
     assert_equal 1, processed_docs.count
     assert_includes processed_docs, doc1
-    
+
     # Test by_type scope
     pdf_docs = Ragdoll::Core::Models::Document.by_type('pdf')
     assert_equal 1, pdf_docs.count
     assert_includes pdf_docs, doc2
   end
+
 
   def test_processed_query_method
     document = Ragdoll::Core::Models::Document.create!(
@@ -97,12 +102,13 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     assert document.processed?
-    
+
     document.update!(status: 'pending')
     refute document.processed?
   end
+
 
   def test_word_count
     document = Ragdoll::Core::Models::Document.create!(
@@ -112,9 +118,10 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     assert_equal 9, document.word_count
   end
+
 
   def test_character_count
     document = Ragdoll::Core::Models::Document.create!(
@@ -124,9 +131,10 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     assert_equal 11, document.character_count
   end
+
 
   def test_embedding_count
     document = Ragdoll::Core::Models::Document.create!(
@@ -136,18 +144,19 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     assert_equal 0, document.embedding_count
-    
+
     document.embeddings.create!(
       chunk_index: 0,
       embedding_vector: [0.1, 0.2],
       content: 'chunk',
       model_name: 'test'
     )
-    
+
     assert_equal 1, document.embedding_count
   end
+
 
   def test_to_hash
     document = Ragdoll::Core::Models::Document.create!(
@@ -158,9 +167,9 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       status: 'processed',
       metadata: { author: 'Test Author' }
     )
-    
+
     hash = document.to_hash
-    
+
     assert_equal document.id.to_s, hash[:id]
     assert_equal '/test.txt', hash[:location]
     assert_equal 'Test content', hash[:content]
@@ -175,6 +184,7 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
     assert_equal 0, hash[:embedding_count]
   end
 
+
   def test_search_content
     doc1 = Ragdoll::Core::Models::Document.create!(
       location: '/doc1.txt',
@@ -183,7 +193,7 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     doc2 = Ragdoll::Core::Models::Document.create!(
       location: '/doc2.txt',
       content: 'This is about cooking recipes',
@@ -191,22 +201,23 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     # Search by content
     results = Ragdoll::Core::Models::Document.search_content('machine learning')
     assert_equal 1, results.count
     assert_includes results, doc1
-    
+
     # Search by title
     results = Ragdoll::Core::Models::Document.search_content('cooking')
     assert_equal 1, results.count
     assert_includes results, doc2
-    
+
     # Search by location
     results = Ragdoll::Core::Models::Document.search_content('doc1')
     assert_equal 1, results.count
     assert_includes results, doc1
   end
+
 
   def test_stats
     doc1 = Ragdoll::Core::Models::Document.create!(
@@ -216,7 +227,7 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'text',
       status: 'processed'
     )
-    
+
     Ragdoll::Core::Models::Document.create!(
       location: '/doc2.pdf',
       content: 'Content 2',
@@ -224,16 +235,16 @@ class Ragdoll::Core::Models::DocumentTest < Minitest::Test
       document_type: 'pdf',
       status: 'pending'
     )
-    
+
     doc1.embeddings.create!(
       chunk_index: 0,
       embedding_vector: [0.1, 0.2],
       content: 'chunk',
       model_name: 'test'
     )
-    
+
     stats = Ragdoll::Core::Models::Document.stats
-    
+
     assert_equal 2, stats[:total_documents]
     assert_equal({ 'processed' => 1, 'pending' => 1 }, stats[:by_status])
     assert_equal({ 'text' => 1, 'pdf' => 1 }, stats[:by_type])

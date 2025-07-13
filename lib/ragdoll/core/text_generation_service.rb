@@ -7,11 +7,13 @@ module Ragdoll
     class TextGenerationService
       class GenerationError < StandardError; end
 
+
       def initialize(configuration = nil, client: nil)
         @configuration = configuration || Ragdoll::Core.configuration
         @client = client
         configure_ruby_llm_if_possible unless @client
       end
+
 
       def generate_summary(text, max_length: nil)
         return '' if text.nil? || text.strip.empty?
@@ -24,22 +26,22 @@ module Ragdoll
         return text if text.length < min_length
 
         max_length ||= @configuration.summary_max_length || 300
-        
+
         # Clean and prepare text
         cleaned_text = clean_text(text)
-        
+
         # Create summarization prompt
         prompt = build_summary_prompt(cleaned_text, max_length)
-        
+
         begin
           if @client == :ruby_llm_configured
             # Use RubyLLM for text generation
             chat = RubyLLM.chat
-              .with_model(@configuration.summary_model || @configuration.default_model)
-              .with_temperature(0.3)
+                          .with_model(@configuration.summary_model || @configuration.default_model)
+                          .with_temperature(0.3)
             chat.add_message(role: 'user', content: prompt)
             response = chat.complete
-            
+
             if response.respond_to?(:content)
               response.content.strip
             elsif response.respond_to?(:message) && response.message.respond_to?(:content)
@@ -49,7 +51,7 @@ module Ragdoll
             elsif response && response['content']
               response['content'].strip
             else
-              raise GenerationError, "Invalid response format from text generation API"
+              raise GenerationError, 'Invalid response format from text generation API'
             end
           elsif @client
             # Use custom client for testing
@@ -61,44 +63,44 @@ module Ragdoll
               max_tokens: max_length + 50,
               temperature: 0.3
             )
-            
+
             if response && response['choices'] && response['choices'].first
               response['choices'].first['message']['content'].strip
             elsif response && response['content']
               response['content'].strip
             else
-              raise GenerationError, "Invalid response format from text generation API"
+              raise GenerationError, 'Invalid response format from text generation API'
             end
           else
             # Fallback to basic summarization for testing/dev environments
             generate_basic_summary(cleaned_text, max_length)
           end
-
-        rescue => e
+        rescue StandardError => e
           # Fall back to basic summarization if API fails
           puts "Summary generation failed, using fallback: #{e.message}"
           generate_basic_summary(cleaned_text, max_length)
         end
       end
 
+
       def extract_keywords(text, max_keywords: 20)
         return [] if text.nil? || text.strip.empty?
 
         # Clean and prepare text
         cleaned_text = clean_text(text)
-        
+
         # Create keyword extraction prompt
         prompt = build_keyword_prompt(cleaned_text, max_keywords)
-        
+
         begin
           if @client == :ruby_llm_configured
             # Use RubyLLM for keyword extraction
             chat = RubyLLM.chat
-              .with_model(@configuration.summary_model || @configuration.default_model)
-              .with_temperature(0.1)
+                          .with_model(@configuration.summary_model || @configuration.default_model)
+                          .with_temperature(0.1)
             chat.add_message(role: 'user', content: prompt)
             response = chat.complete
-            
+
             if response.respond_to?(:content)
               content = response.content.strip
               parse_keywords_response(content)
@@ -112,7 +114,7 @@ module Ragdoll
               content = response['content'].strip
               parse_keywords_response(content)
             else
-              raise GenerationError, "Invalid response format from text generation API"
+              raise GenerationError, 'Invalid response format from text generation API'
             end
           elsif @client
             # Use custom client for testing
@@ -124,7 +126,7 @@ module Ragdoll
               max_tokens: 200,
               temperature: 0.1
             )
-            
+
             if response && response['choices'] && response['choices'].first
               content = response['choices'].first['message']['content'].strip
               parse_keywords_response(content)
@@ -132,14 +134,13 @@ module Ragdoll
               content = response['content'].strip
               parse_keywords_response(content)
             else
-              raise GenerationError, "Invalid response format from text generation API"
+              raise GenerationError, 'Invalid response format from text generation API'
             end
           else
             # Fallback to basic keyword extraction for testing/dev environments
             extract_basic_keywords(cleaned_text, max_keywords)
           end
-
-        rescue => e
+        rescue StandardError => e
           # Fall back to basic keyword extraction if API fails
           puts "Keyword extraction failed, using fallback: #{e.message}"
           puts "Error class: #{e.class}"
@@ -154,27 +155,27 @@ module Ragdoll
         # Only configure if we have valid configuration
         provider = @configuration.llm_provider
         config = @configuration.llm_config[provider] || {}
-        
+
         # Check if we have the necessary API key for the provider
         has_api_key = case provider
-        when :openai
-          config[:api_key] && !config[:api_key].empty?
-        when :anthropic
-          config[:api_key] && !config[:api_key].empty?
-        when :google
-          config[:api_key] && !config[:api_key].empty?
-        when :azure
-          config[:api_key] && !config[:api_key].empty?
-        when :ollama
-          true  # Ollama doesn't need API key for local setup
-        when :huggingface
-          config[:api_key] && !config[:api_key].empty?
-        when :openrouter
-          config[:api_key] && !config[:api_key].empty?
-        else
-          false
-        end
-        
+                      when :openai
+                        config[:api_key] && !config[:api_key].empty?
+                      when :anthropic
+                        config[:api_key] && !config[:api_key].empty?
+                      when :google
+                        config[:api_key] && !config[:api_key].empty?
+                      when :azure
+                        config[:api_key] && !config[:api_key].empty?
+                      when :ollama
+                        true # Ollama doesn't need API key for local setup
+                      when :huggingface
+                        config[:api_key] && !config[:api_key].empty?
+                      when :openrouter
+                        config[:api_key] && !config[:api_key].empty?
+                      else
+                        false
+                      end
+
         return unless has_api_key
 
         begin
@@ -204,25 +205,27 @@ module Ragdoll
 
           # RubyLLM uses module-level methods, not individual provider classes
           @client = :ruby_llm_configured
-        rescue => e
+        rescue StandardError => e
           # If configuration fails, don't set client (will use fallback)
           puts "RubyLLM configuration failed: #{e.message}"
         end
       end
 
+
       def clean_text(text)
         return '' if text.nil?
-        
+
         # Remove excessive whitespace and normalize
         cleaned = text.strip
-          .gsub(/\s+/, ' ')              # Multiple spaces to single space
-          .gsub(/\n+/, "\n")             # Multiple newlines to single newline
-          .gsub(/\t+/, ' ')              # Tabs to spaces
-        
+                      .gsub(/\s+/, ' ')              # Multiple spaces to single space
+                      .gsub(/\n+/, "\n")             # Multiple newlines to single newline
+                      .gsub(/\t+/, ' ')              # Tabs to spaces
+
         # Truncate if too long (most models have token limits)
-        max_chars = 12000 # Conservative limit for most language models
+        max_chars = 12_000 # Conservative limit for most language models
         cleaned.length > max_chars ? cleaned[0, max_chars] : cleaned
       end
+
 
       def build_summary_prompt(text, max_length)
         <<~PROMPT
@@ -239,11 +242,12 @@ module Ragdoll
         PROMPT
       end
 
+
       def build_keyword_prompt(text, max_keywords)
         <<~PROMPT
-          Please extract the most important keywords and key phrases from the following text. 
+          Please extract the most important keywords and key phrases from the following text.#{' '}
           Provide up to #{max_keywords} keywords that best represent the content.
-          
+
           Requirements:
           - Focus on nouns, important concepts, and technical terms
           - Avoid common stop words and articles
@@ -258,9 +262,10 @@ module Ragdoll
         PROMPT
       end
 
+
       def parse_keywords_response(content)
         # Extract keywords from the response, handling various formats
-        keywords = content
+        content
           .gsub(/^(keywords?:?\s*)/i, '') # Remove "Keywords:" prefix
           .split(/[,\n]/)                 # Split by commas or newlines
           .map(&:strip)                   # Remove whitespace
@@ -270,36 +275,39 @@ module Ragdoll
           .reject { |k| k.length < 2 }    # Remove very short words
           .first(20)                      # Limit to 20 keywords
 
-        keywords
+
       end
+
 
       def generate_basic_summary(text, max_length)
         # Fallback summarization method (same as before)
         clean_text = text.gsub(/\s+/, ' ').strip
-        
+
         # Split into sentences
         sentences = clean_text.split(/[.!?]+/).map(&:strip).reject(&:empty?)
-        
+
         # If content is short, use the whole thing
         return clean_text if clean_text.length <= max_length
-        
+
         # Take first 2-3 sentences or up to max_length characters
         summary_sentences = []
         total_length = 0
-        
+
         sentences.each do |sentence|
-          if total_length + sentence.length <= max_length && summary_sentences.length < 3
-            summary_sentences << sentence
-            total_length += sentence.length
-          else
-            break
-          end
+          break unless total_length + sentence.length <= max_length && summary_sentences.length < 3
+
+          summary_sentences << sentence
+          total_length += sentence.length
+
+
+
         end
-        
+
         summary = summary_sentences.join('. ')
         summary += '.' unless summary.end_with?('.', '!', '?')
         summary
       end
+
 
       def extract_basic_keywords(text, max_keywords)
         # Fallback keyword extraction method (same as before)
@@ -315,29 +323,29 @@ module Ragdoll
           above below under over between among within without across around
           near far close distant here there everywhere nowhere somewhere anywhere
         ]
-        
+
         # Clean and normalize text
         cleaned_text = text.downcase
-                        .gsub(/[^\w\s]/, ' ')  # Remove punctuation
-                        .gsub(/\s+/, ' ')       # Normalize whitespace
-                        .strip
-        
+                           .gsub(/[^\w\s]/, ' ') # Remove punctuation
+                           .gsub(/\s+/, ' ') # Normalize whitespace
+                           .strip
+
         # Split into words and filter
         words = cleaned_text.split(' ')
-                          .reject { |word| word.length < 3 }  # Remove short words
-                          .reject { |word| stop_words.include?(word) }  # Remove stop words
-                          .reject { |word| word.match?(/^\d+$/) }  # Remove pure numbers
-        
+                            .reject { |word| word.length < 3 } # Remove short words
+                            .reject { |word| stop_words.include?(word) } # Remove stop words
+                            .reject { |word| word.match?(/^\d+$/) } # Remove pure numbers
+
         # Count word frequencies
         word_counts = Hash.new(0)
         words.each { |word| word_counts[word] += 1 }
-        
+
         # Get top keywords (words that appear more than once or are significant)
         word_counts
           .select { |word, count| count > 1 || word.length > 6 }
           .sort_by { |word, count| [-count, word] }
-          .first(max_keywords)  # Limit to max_keywords
-          .map { |word, count| word }
+          .first(max_keywords) # Limit to max_keywords
+          .map { |word, _count| word }
       end
     end
   end

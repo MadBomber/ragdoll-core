@@ -7,45 +7,51 @@ class CoreTest < Minitest::Test
     Ragdoll::Core.instance_variable_set(:@configuration, nil)
   end
 
+
   def test_configuration_returns_configuration_instance
     config = Ragdoll::Core.configuration
-    
+
     assert_instance_of Ragdoll::Core::Configuration, config
   end
+
 
   def test_configuration_memoization
     config1 = Ragdoll::Core.configuration
     config2 = Ragdoll::Core.configuration
-    
+
     assert_same config1, config2
   end
+
 
   def test_configure_yields_configuration
     Ragdoll::Core.configure do |config|
       assert_instance_of Ragdoll::Core::Configuration, config
       config.llm_provider = :test_provider
     end
-    
+
     assert_equal :test_provider, Ragdoll::Core.configuration.llm_provider
   end
 
+
   def test_configure_modifies_configuration
-    
+
     Ragdoll::Core.configure do |config|
       config.llm_provider = :new_provider
       config.chunk_size = 500
     end
-    
+
     config = Ragdoll::Core.configuration
     assert_equal :new_provider, config.llm_provider
     assert_equal 500, config.chunk_size
   end
 
+
   def test_client_factory_method_with_no_options
     client = Ragdoll::Core.client
-    
+
     assert_instance_of Ragdoll::Core::Client, client
   end
+
 
   def test_client_factory_method_with_config
     config = Ragdoll::Core::Configuration.new
@@ -54,46 +60,49 @@ class CoreTest < Minitest::Test
       database: ':memory:',
       auto_migrate: true
     }
-    
+
     client = Ragdoll::Core.client(config)
-    
+
     assert_instance_of Ragdoll::Core::Client, client
     assert_equal config, client.instance_variable_get(:@config)
   end
+
 
   def test_reset_configuration_helper_method
     # First, modify the configuration
     Ragdoll::Core.configure do |config|
       config.llm_provider = :modified
     end
-    
+
     assert_equal :modified, Ragdoll::Core.configuration.llm_provider
-    
+
     # Reset should restore defaults
     Ragdoll::Core.reset_configuration!
-    
+
     assert_equal :openai, Ragdoll::Core.configuration.llm_provider
   end
+
 
   def test_multiple_configure_calls
     Ragdoll::Core.configure do |config|
       config.llm_provider = :first
     end
-    
+
     Ragdoll::Core.configure do |config|
       config.chunk_size = 123
     end
-    
+
     config = Ragdoll::Core.configuration
     assert_equal :first, config.llm_provider  # Should persist
     assert_equal 123, config.chunk_size       # Should be set
   end
 
+
   def test_configuration_thread_safety
     # This is a basic test - in practice, thread safety would need more thorough testing
     results = []
     threads = []
-    
+
     3.times do |i|
       threads << Thread.new do
         Ragdoll::Core.configure do |config|
@@ -102,10 +111,10 @@ class CoreTest < Minitest::Test
         results << Ragdoll::Core.configuration.chunk_size
       end
     end
-    
+
     threads.each(&:join)
-    
+
     # All threads should see a valid chunk size
-    assert results.all? { |size| size >= 100 && size <= 102 }
+    assert(results.all? { |size| size >= 100 && size <= 102 })
   end
 end

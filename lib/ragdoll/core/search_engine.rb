@@ -7,6 +7,7 @@ module Ragdoll
         @embedding_service = embedding_service
       end
 
+
       def search_documents(query, options = {})
         limit = options[:limit] || 10
         threshold = options[:threshold] || 0.7
@@ -17,11 +18,12 @@ module Ragdoll
         return [] if query_embedding.nil?
 
         # Search using ActiveRecord models
-        Models::Embedding.search_similar(query_embedding, 
-                                        limit: limit, 
-                                        threshold: threshold, 
-                                        filters: filters)
+        Models::Embedding.search_similar(query_embedding,
+                                         limit: limit,
+                                         threshold: threshold,
+                                         filters: filters)
       end
+
 
       def search_similar_content(query_or_embedding, options = {})
         limit = options[:limit] || 10
@@ -38,11 +40,12 @@ module Ragdoll
         end
 
         # Search using ActiveRecord models
-        Models::Embedding.search_similar(query_embedding, 
-                                        limit: limit, 
-                                        threshold: threshold, 
-                                        filters: filters)
+        Models::Embedding.search_similar(query_embedding,
+                                         limit: limit,
+                                         threshold: threshold,
+                                         filters: filters)
       end
+
 
       def add_document(location, content, metadata = {})
         document = Models::Document.create!(
@@ -53,44 +56,50 @@ module Ragdoll
           metadata: metadata.is_a?(Hash) ? metadata : {},
           status: 'processed'
         )
-        
+
         document.id.to_s
       end
+
 
       def get_document(id)
         document = Models::Document.find_by(id: id)
         document&.to_hash
       end
 
+
       def update_document(id, **updates)
         document = Models::Document.find_by(id: id)
         return nil unless document
-        
+
         # Only update allowed fields
         allowed_updates = updates.slice(:title, :metadata, :status, :document_type)
         document.update!(allowed_updates) if allowed_updates.any?
-        
+
         document.to_hash
       end
+
 
       def delete_document(id)
         document = Models::Document.find_by(id: id)
         return nil unless document
-        
+
         document.destroy!
         true
       end
 
+
       def list_documents(options = {})
         limit = options[:limit] || 100
         offset = options[:offset] || 0
-        
+
         Models::Document.offset(offset).limit(limit).recent.map(&:to_hash)
       end
+
 
       def get_document_stats
         Models::Document.stats
       end
+
 
       def add_embedding(document_id, chunk_index, embedding_vector, metadata = {})
         Models::Embedding.create!(

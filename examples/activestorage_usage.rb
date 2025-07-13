@@ -18,7 +18,7 @@ end
 # Initialize the database
 Ragdoll::Core::Database.setup
 
-puts "=== ActiveStorage Integration Example ==="
+puts '=== ActiveStorage Integration Example ==='
 
 # Example 1: Create document from file path
 puts "\n1. Creating document from file path..."
@@ -29,8 +29,8 @@ begin
   #   title: 'Sample PDF Document'
   # )
   # puts "Document created with file attachment: #{document.file_attached?}"
-  puts "Skipped - requires actual file path"
-rescue => e
+  puts 'Skipped - requires actual file path'
+rescue StandardError => e
   puts "Error: #{e.message}"
 end
 
@@ -66,5 +66,5 @@ puts "Document hash keys: #{hash.keys}"
 puts "File attached in hash: #{hash[:file_attached]}"
 
 puts "\n=== ActiveStorage Integration Complete ==="
-puts "Note: Full ActiveStorage functionality requires proper Rails/ActiveStorage setup"
-puts "The document model gracefully handles cases where ActiveStorage is not available"
+puts 'Note: Full ActiveStorage functionality requires proper Rails/ActiveStorage setup'
+puts 'The document model gracefully handles cases where ActiveStorage is not available'
