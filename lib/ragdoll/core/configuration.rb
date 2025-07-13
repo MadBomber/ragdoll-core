@@ -91,6 +91,15 @@ module Ragdoll
         @llm_config[:huggingface][:api_key] = key
       end
 
+      def openrouter_api_key
+        llm_config[:openrouter]&.dig(:api_key) || ENV['OPENROUTER_API_KEY']
+      end
+
+      def openrouter_api_key=(key)
+        @llm_config[:openrouter] ||= {}
+        @llm_config[:openrouter][:api_key] = key
+      end
+
       private
 
       def default_llm_config
@@ -117,6 +126,9 @@ module Ragdoll
           },
           huggingface: {
             api_key: ENV['HUGGINGFACE_API_KEY']
+          },
+          openrouter: {
+            api_key: ENV['OPENROUTER_API_KEY']
           }
         }
       end

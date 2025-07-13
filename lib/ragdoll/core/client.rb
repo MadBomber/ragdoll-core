@@ -174,7 +174,7 @@ module Ragdoll
       def healthy?
         begin
           Database.connected? && stats[:total_documents] >= 0
-        rescue => e
+        rescue
           false
         end
       end

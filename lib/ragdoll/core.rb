@@ -9,6 +9,7 @@ require_relative "core/models/embedding"
 require_relative "core/document_processor"
 require_relative "core/text_chunker"
 require_relative "core/embedding_service"
+require_relative "core/text_generation_service"
 require_relative "core/search_engine"
 require_relative "core/client"
 

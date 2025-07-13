@@ -114,6 +114,8 @@ module Ragdoll
             ruby_llm_config.ollama_endpoint = config[:endpoint] if config[:endpoint]
           when :huggingface
             ruby_llm_config.huggingface_api_key = config[:api_key]
+          when :openrouter
+            ruby_llm_config.openrouter_api_key = config[:api_key]
           else
             raise EmbeddingError, "Unsupported embedding provider: #{provider}"
           end

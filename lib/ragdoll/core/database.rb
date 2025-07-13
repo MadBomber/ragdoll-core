@@ -24,17 +24,76 @@ module Ragdoll
       end
       
       def self.migrate!
+        # Get the path to the gem root directory  
+        # Current file is lib/ragdoll/core/database.rb, so go up 3 levels to get to gem root
+        gem_root = File.expand_path(File.join(File.dirname(__FILE__), '..', '..', '..'))
         migration_paths = [
-          File.join(File.dirname(__FILE__), '..', '..', '..', '..', 'db', 'migrate')
+          File.join(gem_root, 'db', 'migrate')
         ]
         
         ActiveRecord::Migration.verbose = true
-        ActiveRecord::MigrationContext.new(migration_paths, ActiveRecord::SchemaMigration).migrate
+        
+        # Ensure schema_migrations table exists first
+        unless ActiveRecord::Base.connection.table_exists?('schema_migrations')
+          ActiveRecord::Base.connection.create_table('schema_migrations', id: false) do |t|
+            t.string :version, null: false
+          end
+          ActiveRecord::Base.connection.add_index('schema_migrations', :version, unique: true)
+        end
+        
+        # Debug migration path (silenced for clean test output)
+        # puts "Migration path: #{migration_paths.first}" if ActiveRecord::Migration.verbose
+        migration_files = Dir[File.join(migration_paths.first, '*.rb')].sort
+        # puts "Found #{migration_files.length} migration files" if ActiveRecord::Migration.verbose
+        
+        # Load and run each migration manually since ActiveRecord migration context seems broken
+        migration_files.each do |migration_file|
+          # Extract version from filename
+          version = File.basename(migration_file, '.rb').split('_').first
+          
+          # Skip if already migrated
+          next if ActiveRecord::Base.connection.select_values(
+            "SELECT version FROM schema_migrations WHERE version = '#{version}'"
+          ).any?
+          
+          # Load the migration file to define the class
+          require migration_file
+          
+          # Get the migration class - convert snake_case to CamelCase
+          filename_parts = File.basename(migration_file, '.rb').split('_')[1..-1]
+          migration_class_name = filename_parts.map { |part| part.capitalize }.join
+          
+          begin
+            migration_class = Object.const_get(migration_class_name)
+          rescue NameError
+            puts "Warning: Could not find migration class #{migration_class_name} in #{migration_file}"
+            next
+          end
+          
+          # Run the migration quietly
+          old_verbose = ActiveRecord::Migration.verbose
+          ActiveRecord::Migration.verbose = false
+          migration_class.migrate(:up)
+          ActiveRecord::Migration.verbose = old_verbose
+          
+          # Record the migration
+          ActiveRecord::Base.connection.insert(
+            "INSERT INTO schema_migrations (version) VALUES ('#{version}')"
+          )
+          
+          # Silenced migration progress - uncomment for debugging
+          # puts "Migrated #{migration_class_name}" if ActiveRecord::Migration.verbose
+        end
       end
       
       def self.reset!
         ActiveRecord::Migration.verbose = false
-        ActiveRecord::MigrationContext.new(migration_paths, ActiveRecord::SchemaMigration).down(0)
+        
+        # Drop all tables if they exist
+        %w[ragdoll_embeddings ragdoll_documents schema_migrations].each do |table|
+          ActiveRecord::Base.connection.drop_table(table) if ActiveRecord::Base.connection.table_exists?(table)
+        end
+        
         migrate!
       end
       

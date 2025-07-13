@@ -1,6 +1,6 @@
 require_relative '../test_helper'
 
-class Models::EmbeddingTest < Minitest::Test
+class Ragdoll::Core::Models::EmbeddingTest < Minitest::Test
   def setup
     super
     @document = Ragdoll::Core::Models::Document.create!(
@@ -84,7 +84,7 @@ class Models::EmbeddingTest < Minitest::Test
       model_name: 'model-1'
     )
     
-    embedding2 = Ragdoll::Core::Models::Embedding.create!(
+    Ragdoll::Core::Models::Embedding.create!(
       document: @document,
       chunk_index: 1,
       embedding_vector: [0.3, 0.4],
@@ -172,7 +172,7 @@ class Models::EmbeddingTest < Minitest::Test
       model_name: 'test'
     )
     
-    embedding2 = Ragdoll::Core::Models::Embedding.create!(
+    Ragdoll::Core::Models::Embedding.create!(
       document: @document,
       chunk_index: 1,
       embedding_vector: [0.0, 1.0],
@@ -241,7 +241,7 @@ class Models::EmbeddingTest < Minitest::Test
     )
     
     # Search should mark embedding as used
-    results = Ragdoll::Core::Models::Embedding.search_similar([1.0, 0.0])
+    Ragdoll::Core::Models::Embedding.search_similar([1.0, 0.0])
     
     embedding.reload
     assert_equal 1, embedding.usage_count
@@ -249,7 +249,7 @@ class Models::EmbeddingTest < Minitest::Test
   end
 
   def test_search_similar_threshold
-    embedding = Ragdoll::Core::Models::Embedding.create!(
+    Ragdoll::Core::Models::Embedding.create!(
       document: @document,
       chunk_index: 0,
       embedding_vector: [1.0, 0.0],

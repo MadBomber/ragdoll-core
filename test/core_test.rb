@@ -30,7 +30,6 @@ class CoreTest < Minitest::Test
   end
 
   def test_configure_modifies_configuration
-    original_provider = Ragdoll::Core.configuration.llm_provider
     
     Ragdoll::Core.configure do |config|
       config.llm_provider = :new_provider
@@ -50,7 +49,11 @@ class CoreTest < Minitest::Test
 
   def test_client_factory_method_with_config
     config = Ragdoll::Core::Configuration.new
-    config.storage_backend = :memory
+    config.database_config = {
+      adapter: 'sqlite3',
+      database: ':memory:',
+      auto_migrate: true
+    }
     
     client = Ragdoll::Core.client(config)
     

@@ -12,9 +12,73 @@ module Ragdoll
       def self.parse(file_path)
         new(file_path).parse
       end
+      
+      # Parse from ActiveStorage attached file
+      def self.parse_attachment(attached_file)
+        attached_file.open do |tempfile|
+          new(tempfile.path, attached_file).parse
+        end
+      end
+      
+      # Create document from file path
+      def self.create_document_from_file(file_path, **options)
+        parsed = parse(file_path)
+        
+        document = Models::Document.create!(
+          location: file_path,
+          title: parsed[:title] || File.basename(file_path, File.extname(file_path)),
+          content: parsed[:content],
+          document_type: determine_document_type(file_path),
+          metadata: parsed[:metadata] || {},
+          status: 'processed',
+          **options
+        )
+        
+        # Attach the file if it exists
+        if File.exist?(file_path)
+          document.file.attach(
+            io: File.open(file_path),
+            filename: File.basename(file_path),
+            content_type: determine_content_type(file_path)
+          )
+        end
+        
+        document
+      end
+      
+      # Create document from uploaded file (ActiveStorage compatible)
+      def self.create_document_from_upload(uploaded_file, **options)
+        # Create document first
+        document = Models::Document.create!(
+          location: uploaded_file.original_filename || 'uploaded_file',
+          title: options[:title] || File.basename(uploaded_file.original_filename || 'uploaded_file', 
+                                                 File.extname(uploaded_file.original_filename || '')),
+          content: '', # Will be extracted after file attachment
+          document_type: determine_document_type_from_content_type(uploaded_file.content_type),
+          status: 'processing',
+          metadata: options[:metadata] || {}
+        )
+        
+        # Attach the file
+        document.file.attach(uploaded_file)
+        
+        # Extract content from attached file
+        if document.file.attached?
+          parsed = parse_attachment(document.file)
+          document.update!(
+            content: parsed[:content],
+            title: parsed[:title] || document.title,
+            metadata: document.metadata.merge(parsed[:metadata] || {}),
+            status: 'processed'
+          )
+        end
+        
+        document
+      end
 
-      def initialize(file_path)
+      def initialize(file_path, attached_file = nil)
         @file_path = file_path
+        @attached_file = attached_file
         @file_extension = File.extname(file_path).downcase
       end
 
@@ -185,6 +249,40 @@ module Ragdoll
           metadata: metadata,
           document_type: 'html'
         }
+      end
+      
+      # Helper methods for document type determination
+      def self.determine_document_type(file_path)
+        case File.extname(file_path).downcase
+        when '.pdf' then 'pdf'
+        when '.docx' then 'docx'
+        when '.txt' then 'text'
+        when '.md', '.markdown' then 'markdown'
+        when '.html', '.htm' then 'html'
+        else 'text'
+        end
+      end
+      
+      def self.determine_document_type_from_content_type(content_type)
+        case content_type
+        when 'application/pdf' then 'pdf'
+        when 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' then 'docx'
+        when 'text/plain' then 'text'
+        when 'text/markdown' then 'markdown'
+        when 'text/html' then 'html'
+        else 'text'
+        end
+      end
+      
+      def self.determine_content_type(file_path)
+        case File.extname(file_path).downcase
+        when '.pdf' then 'application/pdf'
+        when '.docx' then 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        when '.txt' then 'text/plain'
+        when '.md', '.markdown' then 'text/markdown'
+        when '.html', '.htm' then 'text/html'
+        else 'application/octet-stream'
+        end
       end
     end
   end

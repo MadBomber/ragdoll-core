@@ -86,7 +86,8 @@ class DocumentProcessorTest < Minitest::Test
     # Create file with non-UTF-8 content
     Tempfile.create(['test', '.txt']) do |file|
       # Write content with ISO-8859-1 encoding
-      file.write("caf\xe9".force_encoding('ISO-8859-1'))
+      content = "caf\xe9".dup.force_encoding('ISO-8859-1')
+      file.write(content)
       file.close
       
       processor = @processor.new(file.path)

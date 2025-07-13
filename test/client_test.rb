@@ -34,9 +34,6 @@ class ClientTest < Minitest::Test
     doc_id = @client.add_text("Relevant context content", title: "Test Doc")
     
     # Mock the search to return results
-    mock_results = [
-      { content: "Relevant context content", document_location: "Test Doc", similarity: 0.9, chunk_index: 0 }
-    ]
     @client.instance_variable_get(:@search_engine).instance_variable_get(:@storage)
            .instance_variable_get(:@embeddings) << {
       document_id: doc_id,
@@ -64,7 +61,7 @@ class ClientTest < Minitest::Test
   end
 
   def test_get_context
-    doc_id = @client.add_text("Context content", title: "Test Doc")
+    @client.add_text("Context content", title: "Test Doc")
     
     result = @client.get_context("test query")
     
@@ -75,7 +72,7 @@ class ClientTest < Minitest::Test
   end
 
   def test_search
-    doc_id = @client.add_text("Searchable content", title: "Test Doc")
+    @client.add_text("Searchable content", title: "Test Doc")
     
     result = @client.search("test query")
     
@@ -86,7 +83,7 @@ class ClientTest < Minitest::Test
   end
 
   def test_search_similar_content
-    doc_id = @client.add_text("Similar content", title: "Test Doc")
+    @client.add_text("Similar content", title: "Test Doc")
     
     result = @client.search_similar_content("test query")
     

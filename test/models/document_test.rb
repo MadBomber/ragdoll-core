@@ -1,6 +1,6 @@
 require_relative '../test_helper'
 
-class Models::DocumentTest < Minitest::Test
+class Ragdoll::Core::Models::DocumentTest < Minitest::Test
   def test_create_document
     document = Ragdoll::Core::Models::Document.create!(
       location: '/path/to/doc.txt',
@@ -217,7 +217,7 @@ class Models::DocumentTest < Minitest::Test
       status: 'processed'
     )
     
-    doc2 = Ragdoll::Core::Models::Document.create!(
+    Ragdoll::Core::Models::Document.create!(
       location: '/doc2.pdf',
       content: 'Content 2',
       title: 'Doc 2',
