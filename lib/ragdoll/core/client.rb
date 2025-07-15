@@ -16,8 +16,8 @@ module Ragdoll
 
       # Primary method for RAG applications
       # Returns context-enhanced content for AI prompts
-      def enhance_prompt(prompt, context_limit: 5, **options)
-        context_data = get_context(prompt, limit: context_limit, **options)
+      def enhance_prompt(prompt:, context_limit: 5, **options)
+        context_data = get_context(query: prompt, limit: context_limit, **options)
 
         if context_data[:context_chunks].any?
           enhanced_prompt = build_enhanced_prompt(prompt, context_data[:combined_context])
@@ -39,8 +39,8 @@ module Ragdoll
 
 
       # Get relevant context without prompt enhancement
-      def get_context(query, limit: 10, **options)
-        results = search_similar_content(query, limit: limit, **options)
+      def get_context(query:, limit: 10, **options)
+        results = search_similar_content(query: query, limit: limit, **options)
 
         context_chunks = results.map do |result|
           {
@@ -62,8 +62,8 @@ module Ragdoll
 
 
       # Semantic search
-      def search(query, **options)
-        results = search_similar_content(query, **options)
+      def search(query:, **options)
+        results = search_similar_content(query: query, **options)
 
         {
           query: query,
@@ -74,49 +74,37 @@ module Ragdoll
 
 
       # Search similar content (core functionality)
-      def search_similar_content(query_or_embedding, **options)
-        @search_engine.search_similar_content(query_or_embedding, **options)
+      def search_similar_content(query:, **options)
+        @search_engine.search_similar_content(query, **options)
       end
 
 
       # Document management
-      def add_document(location_or_content, **options)
-        if File.exist?(location_or_content.to_s)
-          # It's a file path
-          add_file(location_or_content, **options)
-        else
-          # It's content
-          title = options[:title] || 'Untitled Document'
-          add_text(location_or_content, title: title, **options)
-        end
-      end
-
-
-      def add_file(file_path, **options)
+      def add_document(path:)
         # Parse the document
-        parsed = DocumentProcessor.parse(file_path)
+        parsed = DocumentProcessor.parse(path)
 
         # Extract title from metadata or use filename
         title = parsed[:metadata][:title] ||
-                options[:title] ||
-                File.basename(file_path, File.extname(file_path))
+                File.basename(path, File.extname(path))
 
         # Add document to database
-        doc_id = @search_engine.add_document(file_path, parsed[:content], {
+        doc_id = @search_engine.add_document(path, parsed[:content], {
                                                title: title,
                                                document_type: parsed[:document_type],
-                                               **parsed[:metadata],
-                                               **options
+                                               **parsed[:metadata]
                                              })
 
-        # Process and add embeddings
-        process_document_embeddings(doc_id, parsed[:content], options)
+        # Queue background job for embeddings if content is available
+        if parsed[:content].present?
+          Jobs::GenerateEmbeddingsJob.perform_later(doc_id)
+        end
 
         doc_id
       end
 
 
-      def add_text(content, title:, **options)
+      def add_text(content:, title:, **options)
         # Add document to database
         doc_id = @search_engine.add_document(title, content, {
                                                title: title,
@@ -124,23 +112,25 @@ module Ragdoll
                                                **options
                                              })
 
-        # Process and add embeddings
-        process_document_embeddings(doc_id, content, options)
+        # Queue background job for embeddings
+        Jobs::GenerateEmbeddingsJob.perform_later(doc_id, 
+                                                  chunk_size: options[:chunk_size], 
+                                                  chunk_overlap: options[:chunk_overlap])
 
         doc_id
       end
 
 
-      def add_directory(directory_path, recursive: false, **options)
+      def add_directory(path:, recursive: false)
         results = []
-        pattern = recursive ? File.join(directory_path, '**', '*') : File.join(directory_path, '*')
+        pattern = recursive ? File.join(path, '**', '*') : File.join(path, '*')
 
         Dir.glob(pattern).each do |file_path|
           next unless File.file?(file_path)
           next if file_path.match?(/\.(jpg|jpeg|png|gif|bmp|svg|ico)$/i) # Skip images
 
           begin
-            doc_id = add_file(file_path, **options)
+            doc_id = add_document(path: file_path)
             results << { file: file_path, document_id: doc_id, status: 'success' }
           rescue StandardError => e
             results << { file: file_path, error: e.message, status: 'error' }
@@ -151,17 +141,17 @@ module Ragdoll
       end
 
 
-      def get_document(id)
+      def get_document(id:)
         @search_engine.get_document(id)
       end
 
 
-      def update_document(id, **updates)
+      def update_document(id:, **updates)
         @search_engine.update_document(id, **updates)
       end
 
 
-      def delete_document(id)
+      def delete_document(id:)
         @search_engine.delete_document(id)
       end
 
@@ -196,28 +186,6 @@ module Ragdoll
 
       private
 
-      def process_document_embeddings(doc_id, content, options = {})
-        # Chunk the content
-        chunk_size = options[:chunk_size] || @config.chunk_size
-        chunk_overlap = options[:chunk_overlap] || @config.chunk_overlap
-
-        chunks = TextChunker.chunk(content,
-                                   chunk_size: chunk_size,
-                                   chunk_overlap: chunk_overlap)
-
-        # Generate embeddings for each chunk
-        chunks.each_with_index do |chunk, index|
-          embedding = @embedding_service.generate_embedding(chunk)
-          next unless embedding
-
-          @search_engine.add_embedding(doc_id, index, embedding, {
-                                         content: chunk,
-                                         model_name: @config.embedding_model,
-                                         chunk_size: chunk_size,
-                                         chunk_overlap: chunk_overlap
-                                       })
-        end
-      end
 
 
       def build_enhanced_prompt(original_prompt, context)

@@ -2,7 +2,7 @@
 
 require 'active_record'
 require 'active_storage'
-require 'searchkick'
+require_relative '../metadata_schemas'
 
 # == Schema Information
 #
@@ -44,29 +44,42 @@ module Ragdoll
       class Document < ActiveRecord::Base
         self.table_name = 'ragdoll_documents'
 
-        # Full-text search integration - focuses on summary and keywords, not raw content
-        searchkick word_start: %i[title summary keywords],
-                   searchable: %i[title summary keywords],
-                   text_start: [:title],
-                   word_middle: [:summary],
-                   callbacks: :async
+        # PostgreSQL full-text search on summary and keywords
+        # Uses PostgreSQL's built-in full-text search capabilities
 
         # ActiveStorage file attachment (optional - only if ActiveStorage is properly set up)
         # Each document has exactly one file attachment
-        has_one_attached :file if defined?(ActiveStorage) && respond_to?(:has_one_attached)
+        has_one_attached :file
 
-        has_many :embeddings,
-                 class_name: 'Ragdoll::Core::Models::Embedding',
+        # Multi-modal content relationships
+        has_many :text_contents,
+                 class_name: 'Ragdoll::Core::Models::TextContent',
                  foreign_key: 'document_id',
                  dependent: :destroy
 
+        has_many :image_contents,
+                 class_name: 'Ragdoll::Core::Models::ImageContent',
+                 foreign_key: 'document_id',
+                 dependent: :destroy
+
+        has_many :audio_contents,
+                 class_name: 'Ragdoll::Core::Models::AudioContent',
+                 foreign_key: 'document_id',
+                 dependent: :destroy
+
+        # All embeddings across content types
+        has_many :text_embeddings, through: :text_contents, source: :embeddings
+        has_many :image_embeddings, through: :image_contents, source: :embeddings
+        has_many :audio_embeddings, through: :audio_contents, source: :embeddings
+
         validates :location, presence: true
         validates :title, presence: true
-        validates :document_type, presence: true
+        validates :document_type, presence: true, inclusion: { in: %w[text image audio pdf docx html markdown mixed] }
         validates :status, inclusion: { in: %w[pending processing processed error] }
 
-        # Content is optional when file is attached
-        validates :content, presence: true, unless: :file_attached?
+        # Serialize JSON columns
+        serialize :metadata, type: Hash
+        serialize :file_metadata, type: Hash
 
         scope :processed, -> { where(status: 'processed') }
         scope :by_type, ->(type) { where(document_type: type) }
@@ -76,63 +89,123 @@ module Ragdoll
           left_joins(:file_attachment).where(active_storage_attachments: { id: nil })
         }
 
-        # Callbacks to generate summary, extract keywords, and process files
-        before_save :generate_summary_and_keywords, if: :content_changed?
-        after_commit :extract_content_from_file, on: %i[create update],
-                                                 if: :file_attached_and_content_empty?
+        # Callbacks to process files using background jobs
+        after_commit :queue_text_extraction, on: %i[create update],
+                                             if: :file_attached_and_content_empty?
 
         def processed?
           status == 'processed'
         end
 
 
-        def word_count
-          effective_content.split.length
+        # Multi-modal content type detection
+        def multi_modal?
+          content_types.length > 1
+        end
+
+        def content_types
+          types = []
+          types << 'text' if text_contents.any?
+          types << 'image' if image_contents.any?
+          types << 'audio' if audio_contents.any?
+          types
+        end
+
+        def primary_content_type
+          return document_type if %w[text image audio].include?(document_type)
+          return content_types.first if content_types.any?
+          'text' # default
+        end
+
+        # Content statistics
+        def total_word_count
+          text_contents.sum(&:word_count)
+        end
+
+        def total_character_count
+          text_contents.sum(&:character_count)
+        end
+
+        def total_embedding_count
+          text_embeddings.count + image_embeddings.count + audio_embeddings.count
+        end
+
+        def embeddings_by_type
+          {
+            text: text_embeddings.count,
+            image: image_embeddings.count,
+            audio: audio_embeddings.count
+          }
         end
 
 
-        def character_count
-          effective_content.length
-        end
-
-
-        def embedding_count
-          embeddings.count
-        end
-
-
-        # Summary and keywords related methods
+        # Document metadata methods
         def has_summary?
-          summary.present?
+          metadata['summary'].present?
         end
 
+        def summary
+          metadata['summary']
+        end
+
+        def summary=(value)
+          self.metadata = metadata.merge('summary' => value)
+        end
 
         def has_keywords?
-          keywords.present?
+          metadata['keywords'].present?
         end
-
 
         def keywords_array
-          return [] unless keywords.present?
-
-          keywords.split(',').map(&:strip).reject(&:empty?)
+          return [] unless metadata['keywords'].present?
+          
+          case metadata['keywords']
+          when Array
+            metadata['keywords']
+          when String
+            metadata['keywords'].split(',').map(&:strip).reject(&:empty?)
+          else
+            []
+          end
         end
-
 
         def add_keyword(keyword)
           current_keywords = keywords_array
           return if current_keywords.include?(keyword.strip)
 
           current_keywords << keyword.strip
-          self.keywords = current_keywords.join(', ')
-
+          self.metadata = metadata.merge('keywords' => current_keywords)
         end
-
 
         def remove_keyword(keyword)
           current_keywords = keywords_array
           current_keywords.delete(keyword.strip)
-          self.keywords = current_keywords.join(', ')
+          self.metadata = metadata.merge('keywords' => current_keywords)
+        end
+
+        # Metadata accessors for common fields
+        def description
+          metadata['description']
+        end
+
+        def description=(value)
+          self.metadata = metadata.merge('description' => value)
+        end
+
+        def classification
+          metadata['classification']
+        end
+
+        def classification=(value)
+          self.metadata = metadata.merge('classification' => value)
+        end
+
+        def tags
+          metadata['tags'] || []
+        end
+
+        def tags=(value)
+          self.metadata = metadata.merge('tags' => Array(value))
         end
 
 
@@ -159,94 +232,156 @@ module Ragdoll
         end
 
 
-        def effective_content
-          content.present? ? content : extracted_content || ''
-        end
+        # Content processing for multi-modal documents
+        def process_content!
+          return unless file_attached?
 
-
-        def extracted_content
-          return nil unless file_attached?
-
-          # Try to get content from metadata first (cached)
-          cached_content = file.metadata['extracted_content'] if file.metadata.present?
-          return cached_content if cached_content.present?
-
-          # Extract content based on file type
-          extract_text_from_file
-        end
-
-
-
-
-        # Enhanced search using searchkick for full-text search on summary and keywords
-        def self.search_content(query, **options)
-          # Use searchkick if available, fallback to SQL LIKE
-          if searchkick_enabled?
-            search(query, **search_options(options))
+          case file_content_type
+          when /^text\//
+            process_as_text_content
+          when /^image\//
+            process_as_image_content
+          when /^audio\//
+            process_as_audio_content
+          when 'application/pdf'
+            process_pdf_content
+          when 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            process_docx_content
           else
-            sql_search(query)
+            process_as_text_content # fallback
           end
+
+          # Generate embeddings for all content
+          generate_embeddings_for_all_content!
+          
+          # Generate structured metadata using LLM
+          generate_metadata!
+          
+          update!(status: 'processed')
+        end
+
+        # Generate embeddings for all content types
+        def generate_embeddings_for_all_content!
+          text_contents.each(&:generate_embeddings!)
+          image_contents.each(&:generate_embeddings!)
+          audio_contents.each(&:generate_embeddings!)
+        end
+        
+        # Generate structured metadata using LLM
+        def generate_metadata!
+          require_relative '../services/metadata_generator'
+          
+          generator = Services::MetadataGenerator.new
+          generated_metadata = generator.generate_for_document(self)
+          
+          # Validate metadata against schema
+          errors = MetadataSchemas.validate_metadata(document_type, generated_metadata)
+          if errors.any?
+            Rails.logger.warn "Metadata validation errors: #{errors.join(', ')}" if defined?(Rails)
+            puts "Metadata validation errors: #{errors.join(', ')}"
+          end
+          
+          # Merge with existing metadata (preserving user-set values)
+          self.metadata = metadata.merge(generated_metadata)
+          save!
+        rescue StandardError => e
+          Rails.logger.error "Metadata generation failed: #{e.message}" if defined?(Rails)
+          puts "Metadata generation failed: #{e.message}"
         end
 
 
-        # Full-text search with searchkick on summary and keywords
-        def self.full_text_search(query, **options)
-          search(query, **search_options(options))
+
+
+        # PostgreSQL full-text search on metadata fields
+        def self.search_content(query, **options)
+          return none if query.blank?
+
+          # Use PostgreSQL's built-in full-text search across metadata fields
+          where(
+            "to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(metadata->>'summary', '') || ' ' || COALESCE(metadata->>'keywords', '') || ' ' || COALESCE(metadata->>'description', '')) @@ plainto_tsquery('english', ?)",
+            query
+          ).limit(options[:limit] || 20)
         end
 
-
-        # Faceted search by keywords
-        def self.faceted_search(query: nil, keywords: [], **options)
+        # Faceted search by metadata fields
+        def self.faceted_search(query: nil, keywords: [], classification: nil, tags: [], **options)
           scope = all
 
           # Filter by keywords if provided
           if keywords.any?
-            keyword_conditions = keywords.map { |_keyword| 'keywords LIKE ?' }.join(' AND ')
-            keyword_values = keywords.map { |keyword| "%#{keyword}%" }
-            scope = scope.where(keyword_conditions, *keyword_values)
+            keywords.each do |keyword|
+              scope = scope.where("metadata->>'keywords' ILIKE ?", "%#{keyword}%")
+            end
           end
 
-          # Apply text search if query provided
-          if query.present?
-            if searchkick_enabled?
-              # Use searchkick for text search within the filtered scope
-              ids = scope.pluck(:id)
-              search_results = search(query, **search_options(options.merge(where: { id: ids })))
-              return search_results
-            else
-              scope = scope.where(
-                'title ILIKE ? OR summary ILIKE ? OR keywords ILIKE ?',
-                "%#{query}%", "%#{query}%", "%#{query}%"
-              )
+          # Filter by classification
+          if classification.present?
+            scope = scope.where("metadata->>'classification' = ?", classification)
+          end
+
+          # Filter by tags
+          if tags.any?
+            tags.each do |tag|
+              scope = scope.where("metadata ? 'tags' AND metadata->'tags' @> ?", [tag].to_json)
             end
+          end
+
+          # Apply PostgreSQL full-text search if query provided
+          if query.present?
+            scope = scope.where(
+              "to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(metadata->>'summary', '') || ' ' || COALESCE(metadata->>'keywords', '') || ' ' || COALESCE(metadata->>'description', '')) @@ plainto_tsquery('english', ?)",
+              query
+            )
           end
 
           scope.limit(options[:limit] || 20)
         end
 
 
-        # Get all unique keywords for faceted search
+        # Get all unique keywords from metadata
         def self.all_keywords
-          where.not(keywords: [nil, '']).pluck(:keywords)
-               .flat_map { |k| k.split(',').map(&:strip) }
-               .uniq
-               .sort
+          keywords = []
+          where("metadata ? 'keywords'").pluck(:metadata).each do |meta|
+            case meta['keywords']
+            when Array
+              keywords.concat(meta['keywords'])
+            when String
+              keywords.concat(meta['keywords'].split(',').map(&:strip))
+            end
+          end
+          keywords.uniq.sort
         end
 
+        # Get all unique classifications
+        def self.all_classifications
+          where("metadata ? 'classification'").distinct.pluck("metadata->>'classification'").compact.sort
+        end
+
+        # Get all unique tags
+        def self.all_tags
+          tags = []
+          where("metadata ? 'tags'").pluck(:metadata).each do |meta|
+            tags.concat(Array(meta['tags']))
+          end
+          tags.uniq.sort
+        end
 
         # Get keyword frequencies for faceted search
         def self.keyword_frequencies
           frequencies = Hash.new(0)
-          where.not(keywords: [nil, '']).pluck(:keywords).each do |keyword_string|
-            keyword_string.split(',').map(&:strip).each do |keyword|
-              frequencies[keyword] += 1
+          where("metadata ? 'keywords'").pluck(:metadata).each do |meta|
+            case meta['keywords']
+            when Array
+              meta['keywords'].each { |k| frequencies[k] += 1 }
+            when String
+              meta['keywords'].split(',').map(&:strip).each { |k| frequencies[k] += 1 }
             end
           end
           frequencies.sort_by { |_k, v| -v }.to_h
         end
 
 
-        # Hybrid search combining semantic and full-text search
+        # Hybrid search combining semantic and PostgreSQL full-text search
         def self.hybrid_search(query, query_embedding: nil, **options)
           limit = options[:limit] || 20
           semantic_weight = options[:semantic_weight] || 0.7
@@ -265,7 +400,7 @@ module Ragdoll
             end)
           end
 
-          # Get full-text search results
+          # Get PostgreSQL full-text search results
           text_results = search_content(query, limit: limit)
           text_results.each_with_index do |doc, index|
             score = (limit - index).to_f / limit * text_weight
@@ -301,93 +436,113 @@ module Ragdoll
         def search_data
           data = {
             title: title,
-            content: content,
             document_type: document_type,
             location: location,
             status: status,
-            word_count: word_count,
-            character_count: character_count
+            total_word_count: total_word_count,
+            total_character_count: total_character_count,
+            total_embedding_count: total_embedding_count,
+            content_types: content_types,
+            multi_modal: multi_modal?
           }
 
-          # Add metadata if present
+          # Add document metadata
           data.merge!(metadata.transform_keys { |k| "metadata_#{k}" }) if metadata.present?
+          
+          # Add file metadata
+          data.merge!(file_metadata.transform_keys { |k| "file_#{k}" }) if file_metadata.present?
 
           data
         end
 
         private
 
-        def self.searchkick_enabled?
-          defined?(Searchkick) && respond_to?(:search)
+
+        def all_embeddings
+          Ragdoll::Core::Models::Embedding.where(
+            "(embeddable_type = 'Ragdoll::Core::Models::TextContent' AND embeddable_id IN (?)) OR " +
+            "(embeddable_type = 'Ragdoll::Core::Models::ImageContent' AND embeddable_id IN (?)) OR " +
+            "(embeddable_type = 'Ragdoll::Core::Models::AudioContent' AND embeddable_id IN (?))",
+            text_contents.pluck(:id),
+            image_contents.pluck(:id), 
+            audio_contents.pluck(:id)
+          )
         end
-
-
-        def self.search_options(options)
-          {
-            fields: options[:fields] || %i[title summary keywords],
-            match: options[:match] || :word_start,
-            limit: options[:limit] || 20,
-            offset: options[:offset] || 0,
-            where: options[:where] || {},
-            order: options[:order] || { _score: :desc }
-          }
-        end
-
-
-        def self.sql_search(query)
-          where('summary ILIKE ? OR keywords ILIKE ?', "%#{query}%", "%#{query}%")
-            .or(where('title ILIKE ?', "%#{query}%"))
-            .or(where('location ILIKE ?', "%#{query}%"))
-        end
-
 
         def self.embeddings_search(query_embedding, **options)
           Ragdoll::Core::Models::Embedding.search_similar(query_embedding, **options)
         end
 
 
-        # Generate summary and extract keywords from content using ruby_llm
-        def generate_summary_and_keywords
-          return unless content.present?
+        # Multi-modal content processing methods
+        def process_as_text_content
+          extracted_text = extract_text_from_file
+          return unless extracted_text.present?
 
-          text_service = Ragdoll::Core::TextGenerationService.new
-
-          # Generate summary using ruby_llm
-          self.summary = text_service.generate_summary(content)
-
-          # Extract keywords using ruby_llm
-          keywords_array = text_service.extract_keywords(content)
-          self.keywords = keywords_array.join(', ')
+          text_contents.create!(
+            content: extracted_text,
+            model_name: default_text_model,
+            metadata: {
+              extracted_from_file: true,
+              file_type: file_content_type,
+              extraction_method: 'file_processing'
+            }
+          )
         end
 
-
-        # File processing methods
-        def file_attached_and_content_empty?
-          file_attached? && content.blank?
-        end
-
-
-        def extract_content_from_file
-          return unless file_attached?
-          return if content.present? # Don't overwrite existing content
-
-          extracted = extract_text_from_file
-          if extracted.present?
-            # Set content and generate summary/keywords
-            self.content = extracted
-            generate_summary_and_keywords
-
-            # Save all changes
-            update_columns(
-              content: content,
-              summary: summary,
-              keywords: keywords,
-              status: 'processed'
-            )
+        def process_as_image_content
+          image_contents.create!(
+            model_name: default_image_model,
+            description: extract_image_description,
+            metadata: {
+              file_type: file_content_type,
+              dimensions: extract_image_dimensions
+            }
+          ).tap do |image_content|
+            image_content.image.attach(file.blob)
           end
-        rescue StandardError => e
-          puts "Failed to extract content from file: #{e.message}"
-          update_column(:status, 'error') if status == 'processing'
+        end
+
+        def process_as_audio_content
+          audio_contents.create!(
+            model_name: default_audio_model,
+            transcript: extract_audio_transcript,
+            duration: extract_audio_duration,
+            sample_rate: extract_audio_sample_rate,
+            metadata: {
+              file_type: file_content_type
+            }
+          ).tap do |audio_content|
+            audio_content.audio.attach(file.blob)
+          end
+        end
+
+        def process_pdf_content
+          extracted_text = extract_pdf_content
+          return unless extracted_text.present?
+
+          text_contents.create!(
+            content: extracted_text,
+            model_name: default_text_model,
+            metadata: {
+              extracted_from_pdf: true,
+              extraction_method: 'pdf_reader'
+            }
+          )
+        end
+
+        def process_docx_content
+          extracted_text = extract_docx_content
+          return unless extracted_text.present?
+
+          text_contents.create!(
+            content: extracted_text,
+            model_name: default_text_model,
+            metadata: {
+              extracted_from_docx: true,
+              extraction_method: 'docx_parser'
+            }
+          )
         end
 
 
@@ -456,15 +611,63 @@ module Ragdoll
         end
 
 
+        # Default model names for each content type
+        def default_text_model
+          'text-embedding-3-large'
+        end
+
+        def default_image_model
+          'clip-vit-large-patch14'
+        end
+
+        def default_audio_model
+          'whisper-embedding-v1'
+        end
+
+        # Extraction helper methods (stubs - implement based on your needs)
+        def extract_image_description
+          # TODO: Implement with vision AI or manual description
+          nil
+        end
+
+        def extract_image_dimensions
+          # TODO: Extract from image metadata
+          {}
+        end
+
+        def extract_audio_transcript
+          # TODO: Implement with Whisper or other speech-to-text
+          nil
+        end
+
+        def extract_audio_duration
+          # TODO: Extract from audio metadata
+          nil
+        end
+
+        def extract_audio_sample_rate
+          # TODO: Extract from audio metadata
+          nil
+        end
+
         # Get document statistics
         def self.stats
           {
             total_documents: count,
             by_status: group(:status).count,
             by_type: group(:document_type).count,
-            total_embeddings: joins(:embeddings).count,
-            average_word_count: average('LENGTH(content) - LENGTH(REPLACE(content, \' \', \'\')) + 1'),
-            storage_type: 'activerecord'
+            multi_modal_documents: joins(:text_contents, :image_contents).distinct.count +
+                                  joins(:text_contents, :audio_contents).distinct.count +
+                                  joins(:image_contents, :audio_contents).distinct.count,
+            total_text_contents: joins(:text_contents).count,
+            total_image_contents: joins(:image_contents).count,
+            total_audio_contents: joins(:audio_contents).count,
+            total_embeddings: {
+              text: joins(:text_embeddings).count,
+              image: joins(:image_embeddings).count,
+              audio: joins(:audio_embeddings).count
+            },
+            storage_type: 'activerecord_polymorphic'
           }
         end
       end
