@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
+require 'fileutils'
+
 module Ragdoll
   module Core
     class Client
       def initialize(config = nil)
         @config = config || Ragdoll::Core.configuration
+
+        # Setup logging
+        setup_logging
 
         # Setup database connection
         Database.setup(@config.database_config)
@@ -96,11 +101,28 @@ module Ragdoll
                                              })
 
         # Queue background job for embeddings if content is available
+        embeddings_queued = false
         if parsed[:content].present?
-          Jobs::GenerateEmbeddingsJob.perform_later(doc_id)
+          Ragdoll::Core::Jobs::GenerateEmbeddings.perform_later(doc_id)
+          embeddings_queued = true
         end
 
-        doc_id
+        # Return success information
+        {
+          success: true,
+          document_id: doc_id,
+          title: title,
+          document_type: parsed[:document_type],
+          content_length: parsed[:content]&.length || 0,
+          embeddings_queued: embeddings_queued,
+          message: "Document '#{title}' added successfully with ID #{doc_id}"
+        }
+      rescue StandardError => e
+        {
+          success: false,
+          error: e.message,
+          message: "Failed to add document: #{e.message}"
+        }
       end
 
 
@@ -113,7 +135,7 @@ module Ragdoll
                                              })
 
         # Queue background job for embeddings
-        Jobs::GenerateEmbeddingsJob.perform_later(doc_id, 
+        Ragdoll::Core::Jobs::GenerateEmbeddings.perform_later(doc_id, 
                                                   chunk_size: options[:chunk_size], 
                                                   chunk_overlap: options[:chunk_overlap])
 
@@ -142,7 +164,52 @@ module Ragdoll
 
 
       def get_document(id:)
-        @search_engine.get_document(id)
+        document = @search_engine.get_document(id)
+        return nil unless document
+        
+        {
+          id: document.id,
+          title: document.title,
+          location: document.location,
+          status: document.status,
+          document_type: document.document_type,
+          content_length: document.content&.length || 0,
+          embeddings_count: document.all_embeddings.count,
+          created_at: document.created_at,
+          updated_at: document.updated_at
+        }
+      end
+      
+      def document_status(id:)
+        document = Models::Document.find(id)
+        embeddings_count = document.all_embeddings.count
+        
+        {
+          id: document.id,
+          title: document.title,
+          status: document.status,
+          embeddings_count: embeddings_count,
+          embeddings_ready: embeddings_count > 0,
+          content_preview: document.content&.first(200) || "No content",
+          message: case document.status
+                   when 'processed'
+                     "Document processed successfully with #{embeddings_count} embeddings"
+                   when 'processing'
+                     "Document is being processed"
+                   when 'pending'
+                     "Document is pending processing"
+                   when 'error'
+                     "Document processing failed"
+                   else
+                     "Document status: #{document.status}"
+                   end
+        }
+      rescue ActiveRecord::RecordNotFound
+        {
+          success: false,
+          error: "Document not found",
+          message: "Document with ID #{id} does not exist"
+        }
       end
 
 
@@ -187,6 +254,33 @@ module Ragdoll
       private
 
 
+
+      def setup_logging
+        require 'logger'
+        require 'active_job'
+        
+        # Create log directory if it doesn't exist
+        log_dir = File.dirname(@config.log_file)
+        FileUtils.mkdir_p(log_dir) unless Dir.exist?(log_dir)
+        
+        # Set up logger with appropriate level
+        logger = Logger.new(@config.log_file)
+        logger.level = case @config.log_level
+                      when :debug then Logger::DEBUG
+                      when :info then Logger::INFO
+                      when :warn then Logger::WARN
+                      when :error then Logger::ERROR
+                      when :fatal then Logger::FATAL
+                      else Logger::WARN
+                      end
+        
+        # Configure ActiveJob to use our logger and reduce verbosity
+        ActiveJob::Base.logger = logger
+        ActiveJob::Base.logger.level = Logger::WARN
+        
+        # Set up ActiveJob queue adapter - use inline for immediate execution
+        ActiveJob::Base.queue_adapter = :inline
+      end
 
       def build_enhanced_prompt(original_prompt, context)
         template = @config.prompt_template || default_prompt_template

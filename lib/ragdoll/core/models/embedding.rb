@@ -8,30 +8,26 @@ require 'neighbor'
 # Table name: ragdoll_embeddings
 #
 #  id               :integer          not null, primary key
-#  document_id      :integer          not null
-#  chunk_index      :integer          not null
-#  embedding_vector :text             not null
+#  embeddable_type  :string           not null
+#  embeddable_id    :integer          not null
 #  content          :text             not null
-#  model_name       :string           not null
-#  metadata         :json             default({})
+#  embedding_vector :vector           not null
+#  embedding_model  :string           not null
+#  chunk_index      :integer          not null
 #  usage_count      :integer          default(0)
 #  returned_at      :datetime
+#  metadata         :json             default({})
 #  created_at       :datetime         not null
 #  updated_at       :datetime         not null
 #
 # Indexes
 #
-#  index_ragdoll_embeddings_on_document_id                (document_id)
-#  index_ragdoll_embeddings_on_chunk_index                (chunk_index)
-#  index_ragdoll_embeddings_on_model_name                 (model_name)
-#  index_ragdoll_embeddings_on_usage_count                (usage_count)
-#  index_ragdoll_embeddings_on_returned_at                (returned_at)
-#  index_ragdoll_embeddings_on_document_id_and_chunk_index (document_id,chunk_index) UNIQUE
-#  index_ragdoll_embeddings_on_created_at                 (created_at)
-#
-# Foreign Keys
-#
-#  fk_ragdoll_embeddings_document_id  (document_id => ragdoll_documents.id)
+#  index_ragdoll_embeddings_on_embeddable_type_and_embeddable_id (embeddable_type,embeddable_id)
+#  index_ragdoll_embeddings_on_embedding_model                   (embedding_model)
+#  index_ragdoll_embeddings_on_embedding_vector_cosine           (embedding_vector) USING ivfflat
+#  index_ragdoll_embeddings_on_embeddable_chunk                  (embeddable_type,embeddable_id,chunk_index) UNIQUE
+#  index_ragdoll_embeddings_on_usage_count                       (usage_count)
+#  index_ragdoll_embeddings_on_returned_at                       (returned_at)
 #
 
 module Ragdoll
@@ -39,6 +35,8 @@ module Ragdoll
     module Models
       class Embedding < ActiveRecord::Base
         self.table_name = 'ragdoll_embeddings'
+        
+        # No longer need workaround - using embedding_model column name
 
         # Use pgvector for vector similarity search
         has_neighbors :embedding_vector
@@ -50,9 +48,9 @@ module Ragdoll
         validates :chunk_index, presence: true, uniqueness: { scope: [:embeddable_id, :embeddable_type] }
         validates :embedding_vector, presence: true
         validates :content, presence: true
-        validates :model_name, presence: true
+        validates :embedding_model, presence: true
 
-        scope :by_model, ->(model) { where(model_name: model) }
+        scope :by_model, ->(model) { where(embedding_model: model) }
         scope :recent, -> { order(created_at: :desc) }
         scope :frequently_used, -> { where('usage_count > 0').order(usage_count: :desc) }
         scope :by_chunk_order, -> { order(:chunk_index) }
@@ -61,8 +59,7 @@ module Ragdoll
         scope :image_embeddings, -> { where(embeddable_type: 'Ragdoll::Core::Models::ImageContent') }
         scope :audio_embeddings, -> { where(embeddable_type: 'Ragdoll::Core::Models::AudioContent') }
 
-        # Serialize metadata as JSON
-        serialize :metadata, type: Hash
+        # JSON columns are handled natively by PostgreSQL - no serialization needed
 
         # Callback for vector column updates (no-op for pgvector)
         before_save :update_vector_columns
@@ -86,7 +83,7 @@ module Ragdoll
           scope = all
           scope = scope.where(embeddable_id: filters[:embeddable_id]) if filters[:embeddable_id]
           scope = scope.where(embeddable_type: filters[:embeddable_type]) if filters[:embeddable_type]
-          scope = scope.where(model_name: filters[:model_name]) if filters[:model_name]
+          scope = scope.where(embedding_model: filters[:embedding_model]) if filters[:embedding_model]
 
           # Use pgvector for similarity search
           search_with_pgvector(query_embedding, scope, limit, threshold)
@@ -157,7 +154,7 @@ module Ragdoll
             chunk_index: embedding.chunk_index,
             metadata: embedding.metadata || {},
             embedding_dimensions: query_embedding.length,
-            model_name: embedding.model_name,
+            embedding_model: embedding.embedding_model,
             usage_count: embedding.usage_count || 0,
             returned_at: embedding.returned_at,
             usage_score: usage_score,

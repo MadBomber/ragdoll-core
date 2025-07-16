@@ -10,7 +10,8 @@ module Ragdoll
                     :summary_max_length, :summary_min_content_length, :enable_usage_tracking,
                     :usage_ranking_enabled, :usage_recency_weight, :usage_frequency_weight,
                     :usage_similarity_weight, :database_config,
-                    :summary_provider_model, :keywords_provider_model, :embeddings_provider_model
+                    :summary_provider_model, :keywords_provider_model, :embeddings_provider_model,
+                    :log_level, :log_file
 
       def initialize
         @llm_provider = :openai
@@ -39,6 +40,8 @@ module Ragdoll
         @summary_provider_model = 'openai/gpt-4'
         @keywords_provider_model = 'openai/gpt-4'
         @embeddings_provider_model = 'openai/text-embedding-3-small'
+        @log_level = :warn
+        @log_file = File.join(Dir.home, '.ragdoll', 'ragdoll.log')
       end
 
 

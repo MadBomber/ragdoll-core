@@ -7,8 +7,8 @@
 
 class CreateRagdollSchema < ActiveRecord::Migration[7.0]
   def change
-    # Enable pgvector extension
-    enable_extension 'vector'
+    # Enable pgvector extension (if not already enabled)
+    enable_extension 'vector' unless connection.extension_enabled?('vector')
 
     # === Documents Table ===
     create_table :ragdoll_documents,
@@ -30,6 +30,9 @@ class CreateRagdollSchema < ActiveRecord::Migration[7.0]
       # File properties and processing metadata
       t.json :file_metadata, default: {},
                              comment: 'File properties and processing metadata, separate from AI-generated content'
+
+      # Shrine file attachment for documents
+      t.text :file_data, comment: 'Shrine file attachment data (JSON)'
 
       # Standard timestamps
       t.timestamps null: false, comment: 'Standard creation and update timestamps'
@@ -58,15 +61,14 @@ class CreateRagdollSchema < ActiveRecord::Migration[7.0]
       t.references :document, null: false, foreign_key: { to_table: :ragdoll_documents },
                               comment: 'Reference to parent document'
       t.text :content, null: false, comment: 'Raw text content for embedding generation'
-      t.string :model_name, null: false, comment: 'Embedding model to use for this text content'
+      t.string :embedding_model, null: false, comment: 'Embedding model to use for this text content'
       t.integer :chunk_size, default: 1000, comment: 'Text chunk size for embedding generation'
       t.integer :overlap, default: 200, comment: 'Overlap between chunks in characters'
       t.json :metadata, default: {}, comment: 'Additional metadata for text processing'
       t.timestamps null: false, comment: 'Standard creation and update timestamps'
 
-      # Indexes
-      t.index :document_id, comment: 'Index for finding text content by document'
-      t.index :model_name, comment: 'Index for filtering by embedding model'
+      # Indexes (document_id index is automatically created by t.references)
+      t.index :embedding_model, comment: 'Index for filtering by embedding model'
       t.index "to_tsvector('english', content)", 
               using: :gin, 
               name: 'index_ragdoll_text_contents_on_fulltext_search',
@@ -78,15 +80,15 @@ class CreateRagdollSchema < ActiveRecord::Migration[7.0]
                  comment: 'Image content storage for polymorphic embedding architecture' do |t|
       t.references :document, null: false, foreign_key: { to_table: :ragdoll_documents },
                               comment: 'Reference to parent document'
-      t.string :model_name, null: false, comment: 'Embedding model to use for this image content (e.g., CLIP)'
+      t.string :embedding_model, null: false, comment: 'Embedding model to use for this image content (e.g., CLIP)'
       t.text :description, comment: 'Text description of image content for embedding'
       t.text :alt_text, comment: 'Alternative text for accessibility and search'
       t.json :metadata, default: {}, comment: 'Additional metadata including dimensions, processing info'
+      t.text :image_data, comment: 'Shrine image attachment data (JSON)'
       t.timestamps null: false, comment: 'Standard creation and update timestamps'
 
-      # Indexes
-      t.index :document_id, comment: 'Index for finding image content by document'
-      t.index :model_name, comment: 'Index for filtering by embedding model'
+      # Indexes (document_id index is automatically created by t.references)
+      t.index :embedding_model, comment: 'Index for filtering by embedding model'
       t.index "to_tsvector('english', COALESCE(description, '') || ' ' || COALESCE(alt_text, ''))", 
               using: :gin, 
               name: 'index_ragdoll_image_contents_on_fulltext_search',
@@ -98,16 +100,16 @@ class CreateRagdollSchema < ActiveRecord::Migration[7.0]
                  comment: 'Audio content storage for polymorphic embedding architecture' do |t|
       t.references :document, null: false, foreign_key: { to_table: :ragdoll_documents },
                               comment: 'Reference to parent document'
-      t.string :model_name, null: false, comment: 'Embedding model to use for this audio content (e.g., Whisper)'
+      t.string :embedding_model, null: false, comment: 'Embedding model to use for this audio content (e.g., Whisper)'
       t.text :transcript, comment: 'Text transcript of audio content for embedding'
       t.float :duration, comment: 'Duration of audio in seconds'
       t.integer :sample_rate, comment: 'Audio sample rate in Hz'
       t.json :metadata, default: {}, comment: 'Additional metadata including file info, processing parameters'
+      t.text :audio_data, comment: 'Shrine audio attachment data (JSON)'
       t.timestamps null: false, comment: 'Standard creation and update timestamps'
 
-      # Indexes
-      t.index :document_id, comment: 'Index for finding audio content by document'
-      t.index :model_name, comment: 'Index for filtering by embedding model'
+      # Indexes (document_id index is automatically created by t.references)
+      t.index :embedding_model, comment: 'Index for filtering by embedding model'
       t.index :duration, comment: 'Index for filtering by audio duration'
       t.index "to_tsvector('english', COALESCE(transcript, ''))", 
               using: :gin, 
@@ -124,11 +126,11 @@ class CreateRagdollSchema < ActiveRecord::Migration[7.0]
 
       # Embedding content and vector data
       t.text :content, null: false, comment: 'Original text content that was embedded, typically a document chunk'
-      t.vector :embedding_vector, limit: 3072, null: false,
+      t.vector :embedding_vector, limit: 1536, null: false,
                                   comment: 'Vector embedding using pgvector for optimal similarity search performance'
 
       # Embedding metadata
-      t.string :model_name, null: false, comment: 'Embedding model identifier, critical for query compatibility'
+      t.string :embedding_model, null: false, comment: 'Embedding model identifier, critical for query compatibility'
       t.integer :chunk_index, null: false, comment: 'Chunk index for ordering embeddings within the embeddable content'
 
       # Usage analytics
@@ -143,11 +145,12 @@ class CreateRagdollSchema < ActiveRecord::Migration[7.0]
 
       # Primary lookup indexes
       t.index [:embeddable_type, :embeddable_id], comment: 'Index for finding embeddings by embeddable content'
-      t.index :model_name, comment: 'Index for filtering by embedding model'
-      t.index %i[model_name usage_count], comment: 'Composite index for model-specific usage ranking'
+      t.index :embedding_model, comment: 'Index for filtering by embedding model'
+      t.index %i[embedding_model usage_count], comment: 'Composite index for model-specific usage ranking'
       t.index :returned_at, comment: 'Index for recency-based queries and cache management'
       t.index :usage_count, comment: 'Index for popularity-based ranking and optimization'
       t.index %i[embeddable_type embeddable_id chunk_index],
+              name: 'index_ragdoll_embeddings_on_embeddable_chunk',
               comment: 'Composite index for ordered content chunks within embeddable content', unique: true
       
       # pgvector similarity search index

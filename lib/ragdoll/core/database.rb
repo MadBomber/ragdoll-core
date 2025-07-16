@@ -113,9 +113,12 @@ module Ragdoll
 
       def self.default_config
         {
-          adapter: 'sqlite3',
-          database: File.join(Dir.home, '.ragdoll', 'ragdoll.sqlite3'),
-          timeout: 5000,
+          adapter: 'postgresql',
+          database: 'ragdoll_development',
+          username: 'ragdoll',
+          password: ENV['RAGDOLL_DATABASE_PASSWORD'],
+          host: 'localhost',
+          port: 5432,
           auto_migrate: true,
           logger: Logger.new(STDOUT, level: Logger::WARN)
         }

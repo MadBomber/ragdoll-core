@@ -31,6 +31,8 @@ module Ragdoll
     module Models
       class TextContent < ActiveRecord::Base
         self.table_name = 'ragdoll_text_contents'
+        
+        # No longer need workaround - using embedding_model column name
 
         belongs_to :document,
                    class_name: 'Ragdoll::Core::Models::Document',
@@ -42,14 +44,13 @@ module Ragdoll
                  dependent: :destroy
 
         validates :content, presence: true
-        validates :model_name, presence: true
+        validates :embedding_model, presence: true
         validates :chunk_size, presence: true, numericality: { greater_than: 0 }
         validates :overlap, presence: true, numericality: { greater_than_or_equal_to: 0 }
 
-        # Serialize metadata as JSON
-        serialize :metadata, type: Hash
+        # JSON columns are handled natively by PostgreSQL - no serialization needed
 
-        scope :by_model, ->(model) { where(model_name: model) }
+        scope :by_model, ->(model) { where(embedding_model: model) }
         scope :recent, -> { order(created_at: :desc) }
 
         def word_count
@@ -106,7 +107,7 @@ module Ragdoll
             embeddings.create!(
               content: chunk_data[:content],
               chunk_index: chunk_data[:chunk_index],
-              model_name: model_name,
+              embedding_model: embedding_model,
               metadata: {
                 start_position: chunk_data[:start_position],
                 end_position: chunk_data[:end_position],
@@ -128,7 +129,7 @@ module Ragdoll
         def self.stats
           {
             total_text_contents: count,
-            by_model: group(:model_name).count,
+            by_model: group(:embedding_model).count,
             total_embeddings: joins(:embeddings).count,
             average_word_count: average('LENGTH(content) - LENGTH(REPLACE(content, \' \', \'\')) + 1'),
             average_chunk_size: average(:chunk_size)

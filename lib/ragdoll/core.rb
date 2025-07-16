@@ -6,13 +6,18 @@ require_relative 'core/version'
 require_relative 'core/errors'
 require_relative 'core/configuration'
 require_relative 'core/database'
+require_relative 'core/shrine_config'
 require_relative 'core/models/document'
 require_relative 'core/models/embedding'
+require_relative 'core/models/text_content'
+require_relative 'core/models/audio_content'
+require_relative 'core/models/image_content'
 require_relative 'core/document_processor'
 require_relative 'core/text_chunker'
 require_relative 'core/embedding_service'
 require_relative 'core/text_generation_service'
 require_relative 'core/search_engine'
+require_relative 'core/jobs/generate_embeddings'
 require_relative 'core/client'
 
 module Ragdoll
@@ -41,7 +46,7 @@ module Ragdoll
 
     # Delegate high-level API methods to default client
     def_delegators :default_client, :add_document, :search, :enhance_prompt, 
-                   :get_document, :list_documents, :delete_document, 
+                   :get_document, :document_status, :list_documents, :delete_document, 
                    :update_document, :get_context, :search_similar_content,
                    :add_directory, :stats, :healthy?
 

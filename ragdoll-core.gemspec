@@ -32,8 +32,9 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Core dependencies
+  spec.add_dependency 'activejob'
   spec.add_dependency 'activerecord'
-  spec.add_dependency 'activestorage'
+  spec.add_dependency 'shrine'
   spec.add_dependency 'docx'
   spec.add_dependency 'pdf-reader'
   spec.add_dependency 'ruby_llm'
@@ -50,7 +51,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency 'rake'
   spec.add_development_dependency 'rubocop'
   spec.add_development_dependency 'simplecov'
-  spec.add_development_dependency 'sqlite3'
-  spec.add_development_dependency 'sqlite-vec'
+  spec.add_development_dependency 'pg'
   spec.add_development_dependency 'undercover'
 end

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'active_record'
-require 'active_storage'
 
 # == Schema Information
 #
@@ -9,7 +8,7 @@ require 'active_storage'
 #
 #  id           :integer          not null, primary key
 #  document_id  :integer          not null
-#  model_name   :string           not null
+#  embedding_model :string           not null
 #  transcript   :text
 #  duration     :float
 #  sample_rate  :integer
@@ -20,15 +19,15 @@ require 'active_storage'
 # Indexes
 #
 #  index_ragdoll_audio_contents_on_document_id  (document_id)
-#  index_ragdoll_audio_contents_on_model_name   (model_name)
+#  index_ragdoll_audio_contents_on_embedding_model (embedding_model)
 #
 # Foreign Keys
 #
 #  fk_ragdoll_audio_contents_document_id  (document_id => ragdoll_documents.id)
 #
-# ActiveStorage Attachments
+# Shrine Attachments
 #
-#  audio: Single audio attachment per audio content
+#  audio_data: Shrine attachment data (JSON column)
 #
 
 module Ragdoll
@@ -36,6 +35,8 @@ module Ragdoll
     module Models
       class AudioContent < ActiveRecord::Base
         self.table_name = 'ragdoll_audio_contents'
+        
+        # No longer need workaround - using embedding_model column name
 
         belongs_to :document,
                    class_name: 'Ragdoll::Core::Models::Document',
@@ -46,18 +47,17 @@ module Ragdoll
                  class_name: 'Ragdoll::Core::Models::Embedding',
                  dependent: :destroy
 
-        # ActiveStorage audio attachment
-        has_one_attached :audio
+        # Shrine audio attachment
+        include AudioUploader::Attachment(:audio)
 
-        validates :model_name, presence: true
+        validates :embedding_model, presence: true
         validate :audio_attached_or_transcript_present
         validates :duration, numericality: { greater_than: 0 }, allow_nil: true
         validates :sample_rate, numericality: { greater_than: 0 }, allow_nil: true
 
-        # Serialize metadata as JSON
-        serialize :metadata, type: Hash
+        # JSON columns are handled natively by PostgreSQL - no serialization needed
 
-        scope :by_model, ->(model) { where(model_name: model) }
+        scope :by_model, ->(model) { where(embedding_model: model) }
         scope :recent, -> { order(created_at: :desc) }
         scope :with_audio, -> { joins(:audio_attachment) }
         scope :with_transcripts, -> { where.not(transcript: [nil, '']) }
@@ -121,7 +121,7 @@ module Ragdoll
           embeddings.create!(
             content: content,
             chunk_index: 0,
-            model_name: model_name,
+            embedding_model: embedding_model,
             metadata: {
               audio_filename: audio_filename,
               audio_content_type: audio_content_type,
@@ -145,7 +145,7 @@ module Ragdoll
         def self.stats
           {
             total_audio_contents: count,
-            by_model: group(:model_name).count,
+            by_model: group(:embedding_model).count,
             total_embeddings: joins(:embeddings).count,
             with_audio: with_audio.count,
             with_transcripts: with_transcripts.count,

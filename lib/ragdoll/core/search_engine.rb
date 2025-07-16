@@ -50,12 +50,14 @@ module Ragdoll
       def add_document(location, content, metadata = {})
         document = Models::Document.create!(
           location: location,
-          content: content,
           title: metadata[:title] || metadata['title'] || extract_title_from_location(location),
           document_type: metadata[:document_type] || metadata['document_type'] || 'text',
           metadata: metadata.is_a?(Hash) ? metadata : {},
-          status: 'processed'
+          status: 'pending'
         )
+
+        # Set content using the model's setter to trigger TextContent creation
+        document.content = content if content.present?
 
         document.id.to_s
       end
@@ -107,8 +109,8 @@ module Ragdoll
           chunk_index: chunk_index,
           embedding_vector: embedding_vector,
           content: metadata[:content] || '',
-          model_name: metadata[:model_name] || 'unknown',
-          metadata: metadata.except(:content, :model_name)
+          embedding_model: metadata[:embedding_model] || metadata[:model_name] || 'unknown',
+          metadata: metadata.except(:content, :embedding_model, :model_name)
         ).id.to_s
       end
 

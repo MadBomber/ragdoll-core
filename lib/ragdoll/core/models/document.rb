@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'active_record'
-require 'active_storage'
 require_relative '../metadata_schemas'
 
 # == Schema Information
@@ -28,9 +27,9 @@ require_relative '../metadata_schemas'
 #  index_ragdoll_documents_on_status         (status)
 #  index_ragdoll_documents_on_created_at     (created_at)
 #
-# ActiveStorage Attachments
+# Shrine Attachments
 #
-#  file: Single file attachment per document (PDF, DOCX, text, etc.)
+#  file_data: Shrine attachment data (JSON column)
 #
 # Full-text Search
 #
@@ -47,9 +46,8 @@ module Ragdoll
         # PostgreSQL full-text search on summary and keywords
         # Uses PostgreSQL's built-in full-text search capabilities
 
-        # ActiveStorage file attachment (optional - only if ActiveStorage is properly set up)
-        # Each document has exactly one file attachment
-        has_one_attached :file
+        # Shrine file attachment
+        include FileUploader::Attachment(:file)
 
         # Multi-modal content relationships
         has_many :text_contents,
@@ -77,21 +75,19 @@ module Ragdoll
         validates :document_type, presence: true, inclusion: { in: %w[text image audio pdf docx html markdown mixed] }
         validates :status, inclusion: { in: %w[pending processing processed error] }
 
-        # Serialize JSON columns
-        serialize :metadata, type: Hash
-        serialize :file_metadata, type: Hash
+        # JSON columns are handled natively by PostgreSQL - no serialization needed
 
         scope :processed, -> { where(status: 'processed') }
         scope :by_type, ->(type) { where(document_type: type) }
         scope :recent, -> { order(created_at: :desc) }
-        scope :with_files, -> { joins(:file_attachment) }
-        scope :without_files, lambda {
-          left_joins(:file_attachment).where(active_storage_attachments: { id: nil })
-        }
+        scope :with_files, -> { where.not(file_data: nil) }
+        scope :without_files, -> { where(file_data: nil) }
 
         # Callbacks to process files using background jobs
         after_commit :queue_text_extraction, on: %i[create update],
                                              if: :file_attached_and_content_empty?
+        after_commit :create_content_from_pending, on: %i[create update],
+                                                   if: :has_pending_content?
 
         def processed?
           status == 'processed'
@@ -115,6 +111,44 @@ module Ragdoll
           return document_type if %w[text image audio].include?(document_type)
           return content_types.first if content_types.any?
           'text' # default
+        end
+
+        # Dynamic content method that forwards to appropriate content table
+        def content
+          case primary_content_type
+          when 'text'
+            # Return the combined content from all text_contents
+            text_contents.pluck(:content).join("\n\n")
+          when 'image'
+            # Return the combined descriptions from all image_contents
+            image_contents.pluck(:description, :alt_text).flatten.compact.join("\n\n")
+          when 'audio'
+            # Return the combined transcripts from all audio_contents
+            audio_contents.pluck(:transcript).compact.join("\n\n")
+          else
+            # Fallback: try to get any available content
+            all_content = []
+            all_content.concat(text_contents.pluck(:content))
+            all_content.concat(image_contents.pluck(:description, :alt_text).flatten.compact)
+            all_content.concat(audio_contents.pluck(:transcript).compact)
+            all_content.join("\n\n")
+          end
+        end
+
+        # Set content method for backwards compatibility
+        def content=(value)
+          # Store the content to be created after save
+          @pending_content = value
+          
+          # If document is already persisted, create the content immediately
+          if persisted?
+            create_content_from_pending
+          else
+            # Otherwise, set up a callback to create content after save
+            self.define_singleton_method(:after_save_content_callback) do
+              create_content_from_pending
+            end
+          end
         end
 
         # Content statistics
@@ -211,24 +245,20 @@ module Ragdoll
 
         # File-related helper methods
         def file_attached?
-          respond_to?(:file) && file.attached?
-        rescue NoMethodError
-          false
+          file.present?
         end
 
 
         def file_size
-          file_attached? ? file.byte_size : 0
+          file_attached? ? file.size : 0
         end
-
 
         def file_content_type
-          file_attached? ? file.content_type : nil
+          file_attached? ? file.mime_type : nil
         end
 
-
         def file_filename
-          file_attached? ? file.filename.to_s : nil
+          file_attached? ? file.original_filename : nil
         end
 
 
@@ -455,9 +485,6 @@ module Ragdoll
           data
         end
 
-        private
-
-
         def all_embeddings
           Ragdoll::Core::Models::Embedding.where(
             "(embeddable_type = 'Ragdoll::Core::Models::TextContent' AND embeddable_id IN (?)) OR " +
@@ -467,6 +494,72 @@ module Ragdoll
             image_contents.pluck(:id), 
             audio_contents.pluck(:id)
           )
+        end
+
+        private
+
+        def file_attached_and_content_empty?
+          file_attached? && content.blank?
+        end
+
+        def has_pending_content?
+          @pending_content.present?
+        end
+
+        def create_content_from_pending
+          return unless @pending_content.present?
+          
+          value = @pending_content
+          @pending_content = nil
+          
+          case primary_content_type
+          when 'text'
+            # Create or update the first text_content
+            if text_contents.any?
+              text_contents.first.update!(content: value)
+            else
+              text_contents.create!(
+                content: value,
+                embedding_model: default_text_model,
+                metadata: { manually_set: true }
+              )
+            end
+          when 'image'
+            # For images, set the description
+            if image_contents.any?
+              image_contents.first.update!(description: value)
+            else
+              image_contents.create!(
+                description: value,
+                embedding_model: default_image_model,
+                metadata: { manually_set: true }
+              )
+            end
+          when 'audio'
+            # For audio, set the transcript
+            if audio_contents.any?
+              audio_contents.first.update!(transcript: value)
+            else
+              audio_contents.create!(
+                transcript: value,
+                embedding_model: default_audio_model,
+                metadata: { manually_set: true }
+              )
+            end
+          else
+            # Default to text content
+            text_contents.create!(
+              content: value,
+              embedding_model: default_text_model,
+              metadata: { manually_set: true }
+            )
+          end
+        end
+
+        def queue_text_extraction
+          # TODO: Implement background job for text extraction
+          # For now, process synchronously
+          process_content! if file_attached?
         end
 
         def self.embeddings_search(query_embedding, **options)
@@ -481,7 +574,7 @@ module Ragdoll
 
           text_contents.create!(
             content: extracted_text,
-            model_name: default_text_model,
+            embedding_model: default_text_model,
             metadata: {
               extracted_from_file: true,
               file_type: file_content_type,
@@ -492,7 +585,7 @@ module Ragdoll
 
         def process_as_image_content
           image_contents.create!(
-            model_name: default_image_model,
+            embedding_model: default_image_model,
             description: extract_image_description,
             metadata: {
               file_type: file_content_type,
@@ -505,7 +598,7 @@ module Ragdoll
 
         def process_as_audio_content
           audio_contents.create!(
-            model_name: default_audio_model,
+            embedding_model: default_audio_model,
             transcript: extract_audio_transcript,
             duration: extract_audio_duration,
             sample_rate: extract_audio_sample_rate,
@@ -523,7 +616,7 @@ module Ragdoll
 
           text_contents.create!(
             content: extracted_text,
-            model_name: default_text_model,
+            embedding_model: default_text_model,
             metadata: {
               extracted_from_pdf: true,
               extraction_method: 'pdf_reader'
@@ -537,7 +630,7 @@ module Ragdoll
 
           text_contents.create!(
             content: extracted_text,
-            model_name: default_text_model,
+            embedding_model: default_text_model,
             metadata: {
               extracted_from_docx: true,
               extraction_method: 'docx_parser'
@@ -567,8 +660,8 @@ module Ragdoll
             reader = PDF::Reader.new(tempfile.path)
             content = reader.pages.map(&:text).join("\n")
 
-            # Cache the extracted content in file metadata
-            file.metadata['extracted_content'] = content if content.present?
+            # Cache the extracted content in metadata
+            self.metadata = metadata.merge('extracted_content' => content) if content.present?
 
             content
           end
@@ -585,8 +678,8 @@ module Ragdoll
             doc = Docx::Document.open(tempfile.path)
             content = doc.paragraphs.map(&:text).join("\n")
 
-            # Cache the extracted content in file metadata
-            file.metadata['extracted_content'] = content if content.present?
+            # Cache the extracted content in metadata
+            self.metadata = metadata.merge('extracted_content' => content) if content.present?
 
             content
           end
@@ -600,8 +693,8 @@ module Ragdoll
           file.open do |tempfile|
             content = tempfile.read
 
-            # Cache the extracted content in file metadata
-            file.metadata['extracted_content'] = content if content.present?
+            # Cache the extracted content in metadata
+            self.metadata = metadata.merge('extracted_content' => content) if content.present?
 
             content
           end

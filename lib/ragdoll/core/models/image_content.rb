@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'active_record'
-require 'active_storage'
 
 # == Schema Information
 #
@@ -9,7 +8,7 @@ require 'active_storage'
 #
 #  id          :integer          not null, primary key
 #  document_id :integer          not null
-#  model_name  :string           not null
+#  embedding_model :string           not null
 #  description :text
 #  alt_text    :text
 #  metadata    :json             default({})
@@ -19,15 +18,15 @@ require 'active_storage'
 # Indexes
 #
 #  index_ragdoll_image_contents_on_document_id  (document_id)
-#  index_ragdoll_image_contents_on_model_name   (model_name)
+#  index_ragdoll_image_contents_on_embedding_model (embedding_model)
 #
 # Foreign Keys
 #
 #  fk_ragdoll_image_contents_document_id  (document_id => ragdoll_documents.id)
 #
-# ActiveStorage Attachments
+# Shrine Attachments
 #
-#  image: Single image attachment per image content
+#  image_data: Shrine attachment data (JSON column)
 #
 
 module Ragdoll
@@ -35,6 +34,8 @@ module Ragdoll
     module Models
       class ImageContent < ActiveRecord::Base
         self.table_name = 'ragdoll_image_contents'
+        
+        # No longer need workaround - using embedding_model column name
 
         belongs_to :document,
                    class_name: 'Ragdoll::Core::Models::Document',
@@ -45,18 +46,17 @@ module Ragdoll
                  class_name: 'Ragdoll::Core::Models::Embedding',
                  dependent: :destroy
 
-        # ActiveStorage image attachment
-        has_one_attached :image
+        # Shrine image attachment
+        include ImageUploader::Attachment(:image)
 
-        validates :model_name, presence: true
+        validates :embedding_model, presence: true
         validate :image_attached_or_description_present
 
-        # Serialize metadata as JSON
-        serialize :metadata, type: Hash
+        # JSON columns are handled natively by PostgreSQL - no serialization needed
 
-        scope :by_model, ->(model) { where(model_name: model) }
+        scope :by_model, ->(model) { where(embedding_model: model) }
         scope :recent, -> { order(created_at: :desc) }
-        scope :with_images, -> { joins(:image_attachment) }
+        scope :with_images, -> { where.not(image_data: nil) }
         scope :with_descriptions, -> { where.not(description: [nil, '']) }
 
         def embedding_count
@@ -112,7 +112,7 @@ module Ragdoll
             embeddings.create!(
               content: content,
               chunk_index: 0,
-              model_name: model_name,
+              embedding_model: embedding_model,
               metadata: {
                 image_filename: image_filename,
                 image_content_type: image_content_type,
@@ -136,7 +136,7 @@ module Ragdoll
         def self.stats
           {
             total_image_contents: count,
-            by_model: group(:model_name).count,
+            by_model: group(:embedding_model).count,
             total_embeddings: joins(:embeddings).count,
             with_images: with_images.count,
             with_descriptions: with_descriptions.count,

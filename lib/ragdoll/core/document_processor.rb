@@ -15,7 +15,7 @@ module Ragdoll
       end
 
 
-      # Parse from ActiveStorage attached file
+      # Parse from Shrine attached file
       def self.parse_attachment(attached_file)
         attached_file.open do |tempfile|
           new(tempfile.path, attached_file).parse
@@ -39,18 +39,14 @@ module Ragdoll
 
         # Attach the file if it exists
         if File.exist?(file_path)
-          document.file.attach(
-            io: File.open(file_path),
-            filename: File.basename(file_path),
-            content_type: determine_content_type(file_path)
-          )
+          document.file = File.open(file_path)
         end
 
         document
       end
 
 
-      # Create document from uploaded file (ActiveStorage compatible)
+      # Create document from uploaded file (Shrine compatible)
       def self.create_document_from_upload(uploaded_file, **options)
         # Create document first
         document = Models::Document.create!(
@@ -58,16 +54,16 @@ module Ragdoll
           title: options[:title] || File.basename(uploaded_file.original_filename || 'uploaded_file',
                                                   File.extname(uploaded_file.original_filename || '')),
           content: '', # Will be extracted after file attachment
-          document_type: determine_document_type_from_content_type(uploaded_file.content_type),
+          document_type: determine_document_type_from_content_type(uploaded_file.mime_type),
           status: 'processing',
           metadata: options[:metadata] || {}
         )
 
         # Attach the file
-        document.file.attach(uploaded_file)
+        document.file = uploaded_file
 
         # Extract content from attached file
-        if document.file.attached?
+        if document.file.present?
           parsed = parse_attachment(document.file)
           document.update!(
             content: parsed[:content],
