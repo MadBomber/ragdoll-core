@@ -7,14 +7,10 @@ Multi-modal RAG (Retrieval-Augmented Generation) library with PostgreSQL and pgv
 ```ruby
 require 'ragdoll-core'
 
-# Configure with PostgreSQL + pgvector
-Ragdoll.configure do |config|
+# Configure with PostgreSQL + pgvector (or SQLite for development)
+Ragdoll::Core.configure do |config|
   config.llm_provider = :openai
-  config.embedding_models = {
-    text: 'text-embedding-3-large',
-    image: 'clip-vit-large-patch14', 
-    audio: 'whisper-embedding-v1'
-  }
+  config.embedding_model = 'text-embedding-3-small'
   config.database_config = {
     adapter: 'postgresql',
     database: 'ragdoll_production',
@@ -24,18 +20,32 @@ Ragdoll.configure do |config|
     port: 5432,
     auto_migrate: true
   }
+  # Or for development/testing:
+  # config.database_config = {
+  #   adapter: 'sqlite3',
+  #   database: File.join(Dir.home, '.ragdoll', 'ragdoll.sqlite3'),
+  #   auto_migrate: true
+  # }
+  
+  # Logging configuration
+  config.log_level = :warn
+  config.log_file = File.join(Dir.home, '.ragdoll', 'ragdoll.log')
 end
 
-# Add multi-modal documents
-doc_id = Ragdoll.add_document(path: 'research_paper.pdf')      # Text content
-img_id = Ragdoll.add_document(path: 'diagram.png')             # Image content  
-audio_id = Ragdoll.add_document(path: 'podcast.mp3')           # Audio content
+# Add documents - returns detailed result
+result = Ragdoll.add_document(path: 'research_paper.pdf')
+puts result[:message]  # "Document 'research_paper' added successfully with ID 123"
+doc_id = result[:document_id]
 
-# Search across all content types
-results = Ragdoll.search('neural networks')
+# Check document status
+status = Ragdoll.document_status(id: doc_id)
+puts status[:message]  # Shows processing status and embeddings count
 
-# Get document information
-document = Ragdoll.get_document(doc_id)
+# Search across content
+results = Ragdoll.search(query: 'neural networks')
+
+# Get detailed document information
+document = Ragdoll.get_document(id: doc_id)
 ```
 
 ## High-Level API
@@ -45,35 +55,40 @@ The `Ragdoll` module provides a convenient high-level API for common operations:
 ### Document Management
 
 ```ruby
-# Add single document
-doc_id = Ragdoll.add_document(path: 'document.pdf')
-doc_id = Ragdoll.add_document(path: 'document.docx', title: 'Custom Title')
+# Add single document - returns detailed result hash
+result = Ragdoll.add_document(path: 'document.pdf')
+puts result[:success]         # true
+puts result[:document_id]     # "123"
+puts result[:message]         # "Document 'document' added successfully with ID 123"
+puts result[:embeddings_queued] # true
 
-# Add image document
-img_id = Ragdoll.add_document(path: 'diagram.png', document_type: 'image')
+# Check document processing status
+status = Ragdoll.document_status(id: result[:document_id])
+puts status[:status]          # "processed"
+puts status[:embeddings_count] # 15
+puts status[:embeddings_ready] # true
+puts status[:message]         # "Document processed successfully with 15 embeddings"
 
-# Add audio document  
-audio_id = Ragdoll.add_document(path: 'podcast.mp3', document_type: 'audio')
-
-# Add directory of documents
-results = Ragdoll.add_directory(path: '/documents', recursive: true)
-
-# Get document
-document = Ragdoll.get_document(id: doc_id)
+# Get detailed document information
+document = Ragdoll.get_document(id: result[:document_id])
+puts document[:title]         # "document"
+puts document[:status]        # "processed"
+puts document[:embeddings_count] # 15
+puts document[:content_length]   # 5000
 
 # Update document metadata
-Ragdoll.update_document(id: doc_id, title: 'New Title')
+Ragdoll.update_document(id: result[:document_id], title: 'New Title')
 
 # Delete document
-Ragdoll.delete_document(id: doc_id)
+Ragdoll.delete_document(id: result[:document_id])
 
 # List all documents
 documents = Ragdoll.list_documents(limit: 10)
 
-# List by document type
-text_docs = Ragdoll.list_documents(document_type: 'text')
-image_docs = Ragdoll.list_documents(document_type: 'image')
-audio_docs = Ragdoll.list_documents(document_type: 'audio')
+# System statistics
+stats = Ragdoll.stats
+puts stats[:total_documents]  # 50
+puts stats[:total_embeddings] # 1250
 ```
 
 ### Search and Retrieval
@@ -133,17 +148,13 @@ Ragdoll.reset_configuration!
 
 ```ruby
 # Configure the system
-Ragdoll.configure do |config|
+Ragdoll::Core.configure do |config|
   # LLM Provider
   config.llm_provider = :openai
   config.openai_api_key = ENV['OPENAI_API_KEY']
   
-  # Multi-modal embedding models
-  config.embedding_models = {
-    text: 'text-embedding-3-large',
-    image: 'clip-vit-large-patch14',
-    audio: 'whisper-embedding-v1'
-  }
+  # Embedding model
+  config.embedding_model = 'text-embedding-3-small'
   
   # PostgreSQL with pgvector
   config.database_config = {
@@ -156,39 +167,68 @@ Ragdoll.configure do |config|
     auto_migrate: true
   }
   
+  # Or SQLite for development
+  # config.database_config = {
+  #   adapter: 'sqlite3',
+  #   database: File.join(Dir.home, '.ragdoll', 'ragdoll.sqlite3'),
+  #   auto_migrate: true
+  # }
+  
+  # Logging configuration
+  config.log_level = :warn  # :debug, :info, :warn, :error, :fatal
+  config.log_file = File.join(Dir.home, '.ragdoll', 'ragdoll.log')
+  
   # Processing settings
   config.chunk_size = 1000
   config.chunk_overlap = 200
-  config.batch_size = 100
+  config.search_similarity_threshold = 0.7
+  config.max_search_results = 10
 end
 ```
 
-## Multi-Modal Content Support
+## Current Implementation Status
 
-Ragdoll automatically detects and processes different content types:
+### ✅ **Fully Implemented**
+- **Text document processing**: PDF, DOCX, HTML, Markdown, plain text files
+- **Embedding generation**: Text chunking and vector embedding creation
+- **Database schema**: Multi-modal polymorphic architecture with PostgreSQL/SQLite
+- **Search functionality**: Semantic search with cosine similarity
+- **Document management**: Add, update, delete, list operations
+- **Background processing**: ActiveJob integration for async embedding generation
+- **Logging**: Configurable file-based logging with multiple levels
 
-### Supported Content Types
+### 🚧 **In Development**
+- **Image processing**: Framework exists but vision AI integration needs completion
+- **Audio processing**: Framework exists but speech-to-text integration needs completion
+- **LLM metadata generation**: Structured metadata generation service needs implementation
+- **Hybrid search**: Combining semantic and full-text search
 
-- **Text**: PDF, DOCX, HTML, Markdown, plain text files
-- **Image**: PNG, JPG, GIF, WebP with AI-generated descriptions
-- **Audio**: MP3, WAV, M4A with speech-to-text transcription
+### 📋 **Planned Features**
+- **Multi-modal search**: Search across text, image, and audio content types
+- **Advanced metadata**: AI-generated summaries, classifications, and tags
+- **Content-type specific embedding models**: Different models for text, image, audio
 
-### Automatic Processing Pipeline
+## Text Document Processing (Current)
 
-When you add a document, Ragdoll automatically:
+Currently, Ragdoll processes text documents through:
 
-1. **Content Extraction**: Extracts text, analyzes images, or transcribes audio
-2. **Embedding Generation**: Creates embeddings using content-type-specific models
-3. **Metadata Generation**: Uses LLMs to generate structured metadata
-4. **Indexing**: Indexes content for fast search and retrieval
+1. **Content Extraction**: Extracts text from PDF, DOCX, HTML, Markdown, and plain text
+2. **Text Chunking**: Splits content into manageable chunks with configurable size/overlap
+3. **Embedding Generation**: Creates vector embeddings using OpenAI or other providers
+4. **Database Storage**: Stores in polymorphic multi-modal architecture
+5. **Search**: Semantic search using cosine similarity
 
-### LLM-Generated Structured Metadata
+### Example Usage
+```ruby
+# Add a text document
+result = Ragdoll.add_document(path: 'document.pdf')
 
-Each content type gets AI-generated metadata tailored to its characteristics:
+# Check processing status
+status = Ragdoll.document_status(id: result[:document_id])
 
-- **Text documents**: Summary, keywords, classification, topics, sentiment, reading time
-- **Image documents**: Description, objects, scene type, colors, style, mood  
-- **Audio documents**: Content type, transcript summary, speakers, key quotes, language
+# Search the content
+results = Ragdoll.search(query: 'machine learning')
+```
 
 ## PostgreSQL + pgvector Configuration
 
@@ -207,7 +247,7 @@ psql -d ragdoll_production -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ### Configuration Example
 
 ```ruby
-Ragdoll.configure do |config|
+Ragdoll::Core.configure do |config|
   config.database_config = {
     adapter: 'postgresql',
     database: 'ragdoll_production',
