@@ -38,7 +38,7 @@ Ragdoll::Core.configure do |config|
 end
 
 # Access via module delegation
-result = Ragdoll.add_document(path: 'document.pdf')
+result = Ragdoll::Core.add_document(path: 'document.pdf')
 ```
 
 ### Configuration Override

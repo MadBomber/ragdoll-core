@@ -592,7 +592,7 @@ end
 # Temporary configuration for specific operations
 Ragdoll::Core.with_configuration(llm_provider: :anthropic) do
   # Use Anthropic for this operation
-  result = Ragdoll.search("complex query requiring Claude")
+  result = Ragdoll::Core.search("complex query requiring Claude")
 end
 ```
 

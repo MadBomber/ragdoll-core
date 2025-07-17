@@ -148,7 +148,7 @@ The unified embedding system enables sophisticated cross-modal search capabiliti
 
 ```ruby
 # Single query searches text, image descriptions, and audio transcripts
-results = Ragdoll.search(
+results = Ragdoll::Core.search(
   query: "neural network architecture",
   content_types: ['text', 'image', 'audio']  # optional filter
 )
@@ -163,13 +163,13 @@ results = Ragdoll.search(
 
 ```ruby
 # Search only images
-image_results = Ragdoll.search(
+image_results = Ragdoll::Core.search(
   query: "machine learning diagram",
   content_type: 'image'
 )
 
 # Search only audio transcripts
-audio_results = Ragdoll.search(
+audio_results = Ragdoll::Core.search(
   query: "podcast about AI",
   content_type: 'audio'
 )
@@ -179,7 +179,7 @@ audio_results = Ragdoll.search(
 
 ```ruby
 # Complex cross-modal search with metadata filters
-results = Ragdoll.search(
+results = Ragdoll::Core.search(
   query: "deep learning",
   content_types: ['text', 'image'],
   metadata_filters: {
@@ -282,24 +282,24 @@ SearchEngine.analytics_for_query("machine learning")
 
 ```ruby
 # Mixed document with multiple content types
-result = Ragdoll.add_document(path: 'presentation.pptx')
+result = Ragdoll::Core.add_document(path: 'presentation.pptx')
 # Automatically extracts:
 # - Text from slides → TextContent
 # - Images from slides → ImageContent  
 # - Speaker notes → TextContent
 
 # Manual content addition
-doc_id = Ragdoll.add_document(path: 'research_paper.pdf')[:document_id]
+doc_id = Ragdoll::Core.add_document(path: 'research_paper.pdf')[:document_id]
 
 # Add supplementary image
-Ragdoll.add_image(
+Ragdoll::Core.add_image(
   document_id: doc_id,
   image_path: 'diagram.png',
   description: 'Neural network architecture diagram'
 )
 
 # Add supplementary audio
-Ragdoll.add_audio(
+Ragdoll::Core.add_audio(
   document_id: doc_id,
   audio_path: 'presentation.mp3',
   transcript: 'Today we discuss neural network architectures...'
@@ -310,7 +310,7 @@ Ragdoll.add_audio(
 
 ```ruby
 # Unified search across all content
-results = Ragdoll.search(query: 'convolutional neural networks')
+results = Ragdoll::Core.search(query: 'convolutional neural networks')
 
 results.each do |result|
   case result[:content_type]

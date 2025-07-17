@@ -8,7 +8,7 @@ Database-oriented multi-modal RAG (Retrieval-Augmented Generation) library built
 require 'ragdoll-core'
 
 # Configure with PostgreSQL + pgvector (or SQLite for development)
-Ragdoll.configure do |config|
+Ragdoll::Core.configure do |config|
   config.llm_provider = :openai
   config.embedding_model = 'text-embedding-3-small'
   config.database_config = {
@@ -33,19 +33,19 @@ Ragdoll.configure do |config|
 end
 
 # Add documents - returns detailed result
-result = Ragdoll.add_document(path: 'research_paper.pdf')
+result = Ragdoll::Core.add_document(path: 'research_paper.pdf')
 puts result[:message]  # "Document 'research_paper' added successfully with ID 123"
 doc_id = result[:document_id]
 
 # Check document status
-status = Ragdoll.document_status(id: doc_id)
+status = Ragdoll::Core.document_status(id: doc_id)
 puts status[:message]  # Shows processing status and embeddings count
 
 # Search across content
-results = Ragdoll.search(query: 'neural networks')
+results = Ragdoll::Core.search(query: 'neural networks')
 
 # Get detailed document information
-document = Ragdoll.get_document(id: doc_id)
+document = Ragdoll::Core.get_document(id: doc_id)
 ```
 
 ## High-Level API
@@ -56,37 +56,37 @@ The `Ragdoll` module provides a convenient high-level API for common operations:
 
 ```ruby
 # Add single document - returns detailed result hash
-result = Ragdoll.add_document(path: 'document.pdf')
+result = Ragdoll::Core.add_document(path: 'document.pdf')
 puts result[:success]         # true
 puts result[:document_id]     # "123"
 puts result[:message]         # "Document 'document' added successfully with ID 123"
 puts result[:embeddings_queued] # true
 
 # Check document processing status
-status = Ragdoll.document_status(id: result[:document_id])
+status = Ragdoll::Core.document_status(id: result[:document_id])
 puts status[:status]          # "processed"
 puts status[:embeddings_count] # 15
 puts status[:embeddings_ready] # true
 puts status[:message]         # "Document processed successfully with 15 embeddings"
 
 # Get detailed document information
-document = Ragdoll.get_document(id: result[:document_id])
+document = Ragdoll::Core.get_document(id: result[:document_id])
 puts document[:title]         # "document"
 puts document[:status]        # "processed"
 puts document[:embeddings_count] # 15
 puts document[:content_length]   # 5000
 
 # Update document metadata
-Ragdoll.update_document(id: result[:document_id], title: 'New Title')
+Ragdoll::Core.update_document(id: result[:document_id], title: 'New Title')
 
 # Delete document
-Ragdoll.delete_document(id: result[:document_id])
+Ragdoll::Core.delete_document(id: result[:document_id])
 
 # List all documents
-documents = Ragdoll.list_documents(limit: 10)
+documents = Ragdoll::Core.list_documents(limit: 10)
 
 # System statistics
-stats = Ragdoll.stats
+stats = Ragdoll::Core.stats
 puts stats[:total_documents]  # 50
 puts stats[:total_embeddings] # 1250
 ```
@@ -95,15 +95,15 @@ puts stats[:total_embeddings] # 1250
 
 ```ruby
 # Semantic search across all content types
-results = Ragdoll.search(query: 'artificial intelligence')
+results = Ragdoll::Core.search(query: 'artificial intelligence')
 
 # Search specific content types
-text_results = Ragdoll.search(query: 'machine learning', content_type: 'text')
-image_results = Ragdoll.search(query: 'neural network diagram', content_type: 'image')
-audio_results = Ragdoll.search(query: 'AI discussion', content_type: 'audio')
+text_results = Ragdoll::Core.search(query: 'machine learning', content_type: 'text')
+image_results = Ragdoll::Core.search(query: 'neural network diagram', content_type: 'image')
+audio_results = Ragdoll::Core.search(query: 'AI discussion', content_type: 'audio')
 
 # Advanced search with metadata filters
-results = Ragdoll.search(
+results = Ragdoll::Core.search(
   query: 'deep learning',
   classification: 'research',
   keywords: ['AI', 'neural networks'],
@@ -111,16 +111,16 @@ results = Ragdoll.search(
 )
 
 # Get context for RAG applications
-context = Ragdoll.get_context(query: 'machine learning', limit: 5)
+context = Ragdoll::Core.get_context(query: 'machine learning', limit: 5)
 
 # Enhanced prompt with context
-enhanced = Ragdoll.enhance_prompt(
+enhanced = Ragdoll::Core.enhance_prompt(
   prompt: 'What is machine learning?',
   context_limit: 5
 )
 
 # Hybrid search combining semantic and full-text
-results = Ragdoll.hybrid_search(
+results = Ragdoll::Core.hybrid_search(
   query: 'neural networks',
   semantic_weight: 0.7,
   text_weight: 0.3
@@ -131,17 +131,17 @@ results = Ragdoll.hybrid_search(
 
 ```ruby
 # Get system statistics
-stats = Ragdoll.stats
+stats = Ragdoll::Core.stats
 # Returns information about documents, content types, embeddings, etc.
 
 # Health check
-healthy = Ragdoll.healthy?
+healthy = Ragdoll::Core.healthy?
 
 # Get configuration
-config = Ragdoll.configuration
+config = Ragdoll::Core.configuration
 
 # Reset configuration (useful for testing)
-Ragdoll.reset_configuration!
+Ragdoll::Core.reset_configuration!
 ```
 
 ### Configuration
@@ -242,13 +242,13 @@ Currently, Ragdoll processes text documents through:
 ### Example Usage
 ```ruby
 # Add a text document
-result = Ragdoll.add_document(path: 'document.pdf')
+result = Ragdoll::Core.add_document(path: 'document.pdf')
 
 # Check processing status
-status = Ragdoll.document_status(id: result[:document_id])
+status = Ragdoll::Core.document_status(id: result[:document_id])
 
 # Search the content
-results = Ragdoll.search(query: 'machine learning')
+results = Ragdoll::Core.search(query: 'machine learning')
 ```
 
 ## PostgreSQL + pgvector Configuration

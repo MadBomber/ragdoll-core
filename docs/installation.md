@@ -658,7 +658,7 @@ ANALYZE ragdoll_embeddings;
 
 1. **Check Documentation**: Review the complete documentation in `docs/`
 2. **Enable Debug Logging**: Set `config.log_level = :debug`
-3. **Health Check**: Run `Ragdoll.health_check` to identify issues
+3. **Health Check**: Run `Ragdoll::Core.health_check` to identify issues
 4. **GitHub Issues**: Report bugs and feature requests
 5. **Community**: Join discussions and get help from other users
 

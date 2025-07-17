@@ -213,7 +213,7 @@ end
 
 # Quick stats
 def ragdoll_stats
-  Ragdoll.stats
+  Ragdoll::Core.stats
 end
 
 # Quick document count (safe)
@@ -242,7 +242,7 @@ end
 # Quick health check (safe)
 def ragdoll_health
   {
-    healthy: Ragdoll.healthy?,
+    healthy: Ragdoll::Core.healthy?,
     documents: doc_count,
     embeddings: embedding_count,
     database_connected: Ragdoll::Core::Database.connected?,

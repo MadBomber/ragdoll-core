@@ -93,7 +93,7 @@ end
 
 ```ruby
 # Add a PDF document
-result = Ragdoll.add_document(path: 'research_paper.pdf')
+result = Ragdoll::Core.add_document(path: 'research_paper.pdf')
 puts result[:message]
 # => "Document 'research_paper' added successfully with ID 123"
 
@@ -105,7 +105,7 @@ doc_id = result[:document_id]
 
 ```ruby
 # Check if document processing is complete
-status = Ragdoll.document_status(id: doc_id)
+status = Ragdoll::Core.document_status(id: doc_id)
 puts "Status: #{status[:status]}"
 puts "Progress: #{status[:progress]}%"
 puts "Embeddings: #{status[:embeddings_count]} ready"
@@ -113,7 +113,7 @@ puts "Embeddings: #{status[:embeddings_count]} ready"
 # Wait for processing to complete (in real applications, use background monitoring)
 while status[:status] == 'processing'
   sleep(2)
-  status = Ragdoll.document_status(id: doc_id)
+  status = Ragdoll::Core.document_status(id: doc_id)
   puts "Processing... #{status[:progress]}%"
 end
 ```
@@ -122,7 +122,7 @@ end
 
 ```ruby
 # Search for content
-results = Ragdoll.search(query: 'machine learning algorithms')
+results = Ragdoll::Core.search(query: 'machine learning algorithms')
 
 results.each do |result|
   puts "Score: #{result[:similarity_score]}"
@@ -136,7 +136,7 @@ end
 
 ```ruby
 # Get relevant context for a question
-context = Ragdoll.get_context(
+context = Ragdoll::Core.get_context(
   query: 'What are the key benefits of neural networks?',
   limit: 3
 )
@@ -144,7 +144,7 @@ context = Ragdoll.get_context(
 puts "Found #{context[:context_items].size} relevant passages"
 
 # Enhance a prompt with context
-enhanced = Ragdoll.enhance_prompt(
+enhanced = Ragdoll::Core.enhance_prompt(
   prompt: 'Explain neural networks',
   context_limit: 3
 )
@@ -162,7 +162,7 @@ puts enhanced[:enhanced_prompt]
 documents_dir = '/path/to/research/papers'
 
 # Add all PDFs in directory
-result = Ragdoll.add_directory(
+result = Ragdoll::Core.add_directory(
   path: documents_dir,
   file_patterns: ['*.pdf'],
   recursive: true
@@ -174,7 +174,7 @@ puts "Processing #{result[:processed_files]} documents..."
 sleep(30)  # In production, use proper background job monitoring
 
 # Search across all documents
-results = Ragdoll.search(
+results = Ragdoll::Core.search(
   query: 'deep learning optimization techniques',
   limit: 10
 )
@@ -186,19 +186,19 @@ puts "Found #{results.size} relevant passages across your research library"
 
 ```ruby
 # Add different types of content
-text_result = Ragdoll.add_text(
+text_result = Ragdoll::Core.add_text(
   content: "This is important information about AI safety...",
   title: "AI Safety Notes"
 )
 
 # Add an image with description
-image_result = Ragdoll.add_image(
+image_result = Ragdoll::Core.add_image(
   image_path: 'neural_network_diagram.png',
   description: 'Diagram showing the architecture of a convolutional neural network'
 )
 
 # Search across all content types
-mixed_results = Ragdoll.search(
+mixed_results = Ragdoll::Core.search(
   query: 'neural network architecture',
   content_types: ['text', 'image']
 )
@@ -222,7 +222,7 @@ knowledge_files = [
 ]
 
 knowledge_files.each do |file|
-  result = Ragdoll.add_document(path: file)
+  result = Ragdoll::Core.add_document(path: file)
   puts "Added: #{result[:message]}"
 end
 
@@ -231,7 +231,7 @@ sleep(60)
 
 # Answer questions using RAG
 def answer_question(question)
-  enhanced = Ragdoll.enhance_prompt(
+  enhanced = Ragdoll::Core.enhance_prompt(
     prompt: question,
     context_limit: 5,
     include_sources: true
@@ -294,7 +294,7 @@ end
 
 ```ruby
 # System health check
-health = Ragdoll.health_check
+health = Ragdoll::Core.health_check
 puts "System status: #{health[:status]}"
 puts "Components:"
 health[:components].each do |component, status|
@@ -306,7 +306,7 @@ end
 
 ```ruby
 # Comprehensive statistics
-stats = Ragdoll.stats
+stats = Ragdoll::Core.stats
 
 puts "Documents: #{stats[:documents][:total]}"
 puts "Embeddings: #{stats[:embeddings][:total]}"
@@ -318,7 +318,7 @@ puts "Storage used: #{stats[:usage][:storage_used]}"
 
 ```ruby
 # List recent documents
-recent_docs = Ragdoll.list_documents(
+recent_docs = Ragdoll::Core.list_documents(
   limit: 10,
   sort: 'created_at',
   order: 'desc'
@@ -355,11 +355,11 @@ config.database_config = {
 #### Document Processing Stuck
 ```ruby
 # Check document status
-status = Ragdoll.document_status(id: doc_id)
+status = Ragdoll::Core.document_status(id: doc_id)
 puts status
 
 # Check background job status
-job_status = Ragdoll.job_status
+job_status = Ragdoll::Core.job_status
 puts "Active jobs: #{job_status[:active_jobs]}"
 puts "Failed jobs: #{job_status[:failed_jobs]}"
 ```
