@@ -90,10 +90,25 @@ module Ragdoll
       def self.reset!
         ActiveRecord::Migration.verbose = false
 
-        # Drop all tables if they exist
-        %w[ragdoll_embeddings ragdoll_documents schema_migrations].each do |table|
+        # Drop all tables in correct order (respecting foreign key constraints)
+        # Order: dependent tables first, then parent tables
+        tables_to_drop = %w[
+          ragdoll_embeddings
+          ragdoll_text_contents
+          ragdoll_image_contents
+          ragdoll_audio_contents
+          ragdoll_documents
+          schema_migrations
+        ]
+
+        tables_to_drop.each do |table|
           if ActiveRecord::Base.connection.table_exists?(table)
-            ActiveRecord::Base.connection.drop_table(table)
+            # For PostgreSQL, we can use CASCADE to drop dependent objects
+            if ActiveRecord::Base.connection.adapter_name.downcase.include?('postgresql')
+              ActiveRecord::Base.connection.execute("DROP TABLE IF EXISTS #{table} CASCADE")
+            else
+              ActiveRecord::Base.connection.drop_table(table)
+            end
           end
         end
 

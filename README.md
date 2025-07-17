@@ -1,6 +1,6 @@
 # Ragdoll::Core
 
-Multi-modal RAG (Retrieval-Augmented Generation) library with PostgreSQL and pgvector for high-performance semantic search. Supports text, image, and audio content with LLM-generated structured metadata.
+Database-oriented multi-modal RAG (Retrieval-Augmented Generation) library built on ActiveRecord. Features PostgreSQL + pgvector for high-performance semantic search, polymorphic content architecture, and dual metadata design for sophisticated document analysis.
 
 ## Quick Start
 
@@ -8,7 +8,7 @@ Multi-modal RAG (Retrieval-Augmented Generation) library with PostgreSQL and pgv
 require 'ragdoll-core'
 
 # Configure with PostgreSQL + pgvector (or SQLite for development)
-Ragdoll::Core.configure do |config|
+Ragdoll.configure do |config|
   config.llm_provider = :openai
   config.embedding_model = 'text-embedding-3-small'
   config.database_config = {
@@ -26,7 +26,7 @@ Ragdoll::Core.configure do |config|
   #   database: File.join(Dir.home, '.ragdoll', 'ragdoll.sqlite3'),
   #   auto_migrate: true
   # }
-  
+
   # Logging configuration
   config.log_level = :warn
   config.log_file = File.join(Dir.home, '.ragdoll', 'ragdoll.log')
@@ -152,10 +152,10 @@ Ragdoll::Core.configure do |config|
   # LLM Provider
   config.llm_provider = :openai
   config.openai_api_key = ENV['OPENAI_API_KEY']
-  
+
   # Embedding model
   config.embedding_model = 'text-embedding-3-small'
-  
+
   # PostgreSQL with pgvector
   config.database_config = {
     adapter: 'postgresql',
@@ -166,18 +166,18 @@ Ragdoll::Core.configure do |config|
     port: 5432,
     auto_migrate: true
   }
-  
+
   # Or SQLite for development
   # config.database_config = {
   #   adapter: 'sqlite3',
   #   database: File.join(Dir.home, '.ragdoll', 'ragdoll.sqlite3'),
   #   auto_migrate: true
   # }
-  
+
   # Logging configuration
   config.log_level = :warn  # :debug, :info, :warn, :error, :fatal
   config.log_file = File.join(Dir.home, '.ragdoll', 'ragdoll.log')
-  
+
   # Processing settings
   config.chunk_size = 1000
   config.chunk_overlap = 200
@@ -192,31 +192,52 @@ end
 - **Text document processing**: PDF, DOCX, HTML, Markdown, plain text files
 - **Embedding generation**: Text chunking and vector embedding creation
 - **Database schema**: Multi-modal polymorphic architecture with PostgreSQL/SQLite
-- **Search functionality**: Semantic search with cosine similarity
+- **Dual metadata architecture**: Separate LLM-generated content analysis and file properties
+- **Search functionality**: Semantic search with cosine similarity and usage analytics
 - **Document management**: Add, update, delete, list operations
 - **Background processing**: ActiveJob integration for async embedding generation
+- **LLM metadata generation**: AI-powered structured content analysis with schema validation
 - **Logging**: Configurable file-based logging with multiple levels
 
 ### 🚧 **In Development**
 - **Image processing**: Framework exists but vision AI integration needs completion
 - **Audio processing**: Framework exists but speech-to-text integration needs completion
-- **LLM metadata generation**: Structured metadata generation service needs implementation
-- **Hybrid search**: Combining semantic and full-text search
+- **Hybrid search**: Combining semantic and full-text search capabilities
 
 ### 📋 **Planned Features**
 - **Multi-modal search**: Search across text, image, and audio content types
-- **Advanced metadata**: AI-generated summaries, classifications, and tags
 - **Content-type specific embedding models**: Different models for text, image, audio
+- **Enhanced metadata schemas**: Domain-specific metadata templates
+
+## Architecture Highlights
+
+### Dual Metadata Design
+
+Ragdoll uses a sophisticated dual metadata architecture to separate concerns:
+
+- **`metadata` (JSON)**: LLM-generated content analysis including summary, keywords, classification, topics, sentiment, and domain-specific insights
+- **`file_metadata` (JSON)**: System-generated file properties including size, MIME type, dimensions, processing parameters, and technical characteristics
+
+This separation enables both semantic search operations on content meaning and efficient file management operations.
+
+### Polymorphic Multi-Modal Architecture
+
+The database schema uses polymorphic associations to elegantly support multiple content types:
+
+- **Documents**: Central entity with dual metadata columns
+- **Content Types**: Specialized tables for `text_contents`, `image_contents`, `audio_contents`
+- **Embeddings**: Unified vector storage via polymorphic `embeddable` associations
 
 ## Text Document Processing (Current)
 
 Currently, Ragdoll processes text documents through:
 
 1. **Content Extraction**: Extracts text from PDF, DOCX, HTML, Markdown, and plain text
-2. **Text Chunking**: Splits content into manageable chunks with configurable size/overlap
-3. **Embedding Generation**: Creates vector embeddings using OpenAI or other providers
-4. **Database Storage**: Stores in polymorphic multi-modal architecture
-5. **Search**: Semantic search using cosine similarity
+2. **Metadata Generation**: AI-powered analysis creates structured content metadata
+3. **Text Chunking**: Splits content into manageable chunks with configurable size/overlap
+4. **Embedding Generation**: Creates vector embeddings using OpenAI or other providers
+5. **Database Storage**: Stores in polymorphic multi-modal architecture with dual metadata
+6. **Search**: Semantic search using cosine similarity with usage analytics
 
 ### Example Usage
 ```ruby
@@ -296,9 +317,10 @@ gem 'ragdoll-core'
 
 ## Key Design Principles
 
-1. **Multi-Modal First**: Text, image, and audio content as first-class citizens
-2. **PostgreSQL Optimized**: Leverages PostgreSQL + pgvector for maximum performance
-3. **LLM-Enhanced**: Structured metadata generation using latest AI capabilities
-4. **High-Level API**: Simple, intuitive interface for complex operations
-5. **Scalable**: Designed for production workloads with proper indexing
-6. **Extensible**: Easy to add new content types and embedding models
+1. **Database-Oriented**: Built on ActiveRecord with PostgreSQL + pgvector for production performance
+2. **Multi-Modal First**: Text, image, and audio content as first-class citizens via polymorphic architecture
+3. **Dual Metadata Design**: Separates LLM-generated content analysis from file properties
+4. **LLM-Enhanced**: Structured metadata generation with schema validation using latest AI capabilities
+5. **High-Level API**: Simple, intuitive interface for complex operations
+6. **Scalable**: Designed for production workloads with background processing and proper indexing
+7. **Extensible**: Easy to add new content types and embedding models through polymorphic design
