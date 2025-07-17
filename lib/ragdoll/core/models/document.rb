@@ -763,6 +763,62 @@ module Ragdoll
             storage_type: 'activerecord_polymorphic'
           }
         end
+
+        public
+
+        # Convert document to hash representation for API responses
+        def to_hash(include_content: false)
+          {
+            id: id.to_s,
+            title: title,
+            location: location,
+            document_type: document_type,
+            status: status,
+            created_at: created_at&.iso8601,
+            updated_at: updated_at&.iso8601,
+            metadata: metadata || {},
+            file_metadata: file_metadata || {},
+            content_summary: {
+              text_contents: text_contents.count,
+              image_contents: image_contents.count,
+              audio_contents: audio_contents.count,
+              embeddings_count: total_embeddings_count,
+              embeddings_ready: status == 'processed'
+            }
+          }.tap do |hash|
+            if include_content
+              hash[:content_details] = {
+                text_content: text_contents.map(&:content),
+                image_descriptions: image_contents.map(&:description),
+                audio_transcripts: audio_contents.map(&:transcript)
+              }
+            end
+          end
+        end
+
+        private
+
+        def total_embeddings_count
+          # Count embeddings through polymorphic associations
+          embedding_count = 0
+          
+          # Count embeddings for text contents
+          text_contents.each do |content|
+            embedding_count += content.embeddings.count
+          end
+          
+          # Count embeddings for image contents  
+          image_contents.each do |content|
+            embedding_count += content.embeddings.count
+          end
+          
+          # Count embeddings for audio contents
+          audio_contents.each do |content|
+            embedding_count += content.embeddings.count
+          end
+          
+          embedding_count
+        end
       end
     end
   end
